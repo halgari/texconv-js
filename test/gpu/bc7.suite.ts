@@ -6,10 +6,9 @@
 
 import { DXGI_FORMAT } from "../../src/dxgi.js";
 import { makeImage, type Image } from "../../src/image.js";
-import { getDevice } from "../../src/gpu/device.js";
 import { compressBC7 } from "../../src/gpu/compressBC.js";
 import { decodeBC7 } from "../../src/bc7_decode.js";
-import { check, report } from "./harness.js";
+import { check } from "./harness.js";
 
 function makeTestImage(width: number, height: number): Image {
   const img = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, width, height);
@@ -45,8 +44,7 @@ function psnr(a: Image, b: Image): number {
   return 10 * Math.log10((255 * 255) / (sse / count));
 }
 
-const device = await getDevice();
-
+export async function run(device: GPUDevice): Promise<void> {
 {
   const src = makeTestImage(64, 64);
   const bc7 = await compressBC7(device, src, { format: DXGI_FORMAT.BC7_UNORM });
@@ -69,5 +67,4 @@ const device = await getDevice();
   const q = psnr(src, decodeBC7(bc7q));
   check("64x64 quick mode produces valid output", q > 35, `${q.toFixed(2)} dB`);
 }
-
-report();
+}

@@ -4,11 +4,10 @@
 
 import { DXGI_FORMAT } from "../../src/dxgi.js";
 import { makeImage, countMips, type Image } from "../../src/image.js";
-import { getDevice } from "../../src/gpu/device.js";
 import { resizeImage } from "../../src/gpu/resize.js";
 import { convert } from "../../src/texconv.js";
 import { writeDDS, readDDS } from "../../src/dds.js";
-import { check, report } from "./harness.js";
+import { check } from "./harness.js";
 
 function gradient(width: number, height: number): Image {
   const img = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, width, height);
@@ -35,8 +34,7 @@ function flat(width: number, height: number, rgba: [number, number, number, numb
   return img;
 }
 
-const device = await getDevice();
-
+export async function run(device: GPUDevice): Promise<void> {
 // Resize: flat color must be preserved exactly.
 {
   const src = flat(64, 64, [10, 200, 50, 255]);
@@ -78,5 +76,4 @@ const device = await getDevice();
   check("resize+compress base dims", scratch.images[0].width === 64 && scratch.images[0].height === 64);
   check("resize+compress format", scratch.metadata.format === DXGI_FORMAT.BC1_UNORM);
 }
-
-report();
+}

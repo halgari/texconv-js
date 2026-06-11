@@ -6,12 +6,11 @@
 
 import { DXGI_FORMAT } from "../../src/dxgi.js";
 import { makeImage, type Image } from "../../src/image.js";
-import { getDevice } from "../../src/gpu/device.js";
 import { compressBC7 } from "../../src/gpu/compressBC.js";
 import { compressBCn } from "../../src/gpu/compressBCn.js";
 import { decodeBC7 } from "../../src/bc7_decode.js";
 import { decodeBCn } from "../../src/bcn_decode.js";
-import { check, report } from "./harness.js";
+import { check } from "./harness.js";
 
 // 1024x1024 = 256x256 = 65536 blocks, just over WebGPU's 65535 cap — the smallest
 // size that still forces the multi-batch / 2D-dispatch path (keeps the test cheap).
@@ -38,7 +37,7 @@ function psnr(a: Image, b: Image, channels: number[]): number {
   return sse === 0 ? Infinity : 10 * Math.log10(65025 / (sse / n));
 }
 
-const device = await getDevice();
+export async function run(device: GPUDevice): Promise<void> {
 const blocks = ((W + 3) >> 2) * ((H + 3) >> 2);
 check("block count exceeds 1D dispatch cap", blocks > 65535, `${blocks} blocks`);
 
@@ -52,5 +51,4 @@ check("block count exceeds 1D dispatch cap", blocks > 65535, `${blocks} blocks`)
   const q = psnr(img, decodeBCn(bc1), [0, 1, 2]);
   check("large BC1 PSNR > 30dB", q > 30, `${q.toFixed(1)} dB`);
 }
-
-report();
+}

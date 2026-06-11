@@ -1,31 +1,29 @@
-// Runs every GPU integration test (test/gpu/*.run.ts) under vite-node, each in its
-// own process so the Dawn addon's teardown segfault can't cross-contaminate. Exits
-// non-zero if any suite fails.
-import { readdirSync } from "node:fs";
+// Runs each GPU suite in its OWN vite-node process, SEQUENTIALLY. Per-process
+// isolation keeps the flaky node-webgpu (Dawn) addon under its cumulative crash
+// threshold; sequential avoids the GPU/device contention that parallel Dawn
+// instances cause. Uses the local vite-node binary directly (no npx resolution)
+// and retries a crashed suite once for the occasional Dawn flake.
+//
+// The actual GPU compress is ~tens of ms; the per-suite cost is dominated by
+// vite-node startup + the one-time ~2s Dawn device init in each process.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const suites = readdirSync(here).filter((f) => f.endsWith(".run.ts"));
-
-// The Dawn (node-webgpu) addon is intermittently unstable on process teardown /
-// between GPU ops (pthread / std::system_error aborts) — a known addon issue that
-// does NOT occur in real browsers and does not affect output correctness. Retry a
-// crashed suite a few times so CI is reliable.
-const MAX_ATTEMPTS = 4;
+const viteNode = resolve(here, "../../node_modules/.bin/vite-node");
+const entry = join(here, "all.run.ts");
+const SUITES = ["bc7", "bcn", "pipeline", "large"];
 
 let failures = 0;
-for (const suite of suites) {
-  console.log(`\n=== ${suite} ===`);
-  let ok = false;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS && !ok; attempt++) {
-    if (attempt > 1) console.log(`  (retry ${attempt}/${MAX_ATTEMPTS} after Dawn instability)`);
-    const res = spawnSync("npx", ["vite-node", join(here, suite)], { stdio: "inherit" });
-    ok = res.status === 0;
+for (const name of SUITES) {
+  let res = spawnSync(viteNode, [entry, name], { stdio: "inherit", timeout: 60_000 });
+  if (res.status !== 0) {
+    console.log(`  (retrying ${name} after Dawn flake)`);
+    res = spawnSync(viteNode, [entry, name], { stdio: "inherit", timeout: 60_000 });
   }
-  if (!ok) failures++;
+  if (res.status !== 0) failures++;
 }
 
-console.log(`\n${suites.length} suite(s), ${failures} failed`);
+console.log(`\n${SUITES.length} suite(s), ${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);

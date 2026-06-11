@@ -4,10 +4,9 @@
 
 import { DXGI_FORMAT } from "../../src/dxgi.js";
 import { makeImage, type Image } from "../../src/image.js";
-import { getDevice } from "../../src/gpu/device.js";
 import { compressBCn } from "../../src/gpu/compressBCn.js";
 import { decodeBCn } from "../../src/bcn_decode.js";
-import { check, report } from "./harness.js";
+import { check } from "./harness.js";
 
 function makeTestImage(width: number, height: number): Image {
   const img = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, width, height);
@@ -42,7 +41,7 @@ function psnr(a: Image, b: Image, channels: number[]): number {
   return 10 * Math.log10((255 * 255) / (sse / count));
 }
 
-const device = await getDevice();
+export async function run(device: GPUDevice): Promise<void> {
 const src = makeTestImage(64, 64);
 
 const cases: { name: string; fmt: DXGI_FORMAT; channels: number[]; min: number }[] = [
@@ -67,5 +66,4 @@ for (const c of cases) {
   const dec = decodeBCn(enc);
   check("BC3 30x18 (non-mult-4)", psnr(odd, dec, [0, 1, 2, 3]) > 28, `${psnr(odd, dec, [0, 1, 2, 3]).toFixed(2)} dB`);
 }
-
-report();
+}

@@ -16,6 +16,10 @@ export function check(name: string, ok: boolean, detail = ""): void {
   }
 }
 
+export function section(name: string): void {
+  console.log(`\n=== ${name} ===`);
+}
+
 export function report(): never {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
