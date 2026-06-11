@@ -4,77 +4,238 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>texconv-js — WebGPU texture converter</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23e8932c'/%3E%3Ctext x='8' y='12' font-size='11' font-weight='bold' text-anchor='middle' fill='%2315181c' font-family='sans-serif'%3Et%3C/text%3E%3C/svg%3E" />
     <style>
-      :root { color-scheme: dark; }
+      :root {
+        color-scheme: dark;
+        --bg: #101216;
+        --surface: #1a1d21;
+        --surface-2: #24282d;
+        --border: #2f343a;
+        --border-2: #383e46;
+        --text: #f4f4f5;
+        --muted: #9ca3af;
+        --accent: #e8932c;
+        --accent-hover: #f6a23f;
+        --accent-text: #15181c;
+        --good: #22c55e;
+      }
+      * { box-sizing: border-box; }
       body {
-        font: 14px/1.5 system-ui, sans-serif;
-        margin: 0; padding: 2rem; background: #15171c; color: #e7e9ee;
+        font: 14px/1.5 Inter, "Segoe UI", Roboto, system-ui, sans-serif;
+        margin: 0; background: var(--bg); color: var(--text);
+        min-height: 100vh;
       }
-      h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
-      .sub { color: #9aa0ab; margin: 0 0 1.5rem; }
+
+      /* ---- header ---- */
+      header {
+        display: flex; align-items: center; gap: .75rem;
+        background: #15181c; border-bottom: 1px solid var(--border);
+        padding: .8rem 1.5rem;
+      }
+      .logo-mark {
+        width: 26px; height: 26px; border-radius: 6px; background: var(--accent);
+        display: inline-flex; align-items: center; justify-content: center;
+        color: var(--accent-text); font-weight: 800; font-size: 15px;
+      }
+      .logo-name { font-weight: 700; font-size: 1.05rem; letter-spacing: -.01em; }
+      .logo-name em { color: var(--accent); font-style: normal; }
+      .tagline { color: var(--muted); font-size: .82rem; }
+      .gpu { margin-left: auto; font-size: .82rem; color: var(--muted); text-align: right; }
+      .gpu.ok { color: var(--good); }
+
+      /* ---- layout ---- */
+      main {
+        display: flex; gap: 1.25rem; align-items: flex-start;
+        padding: 1.25rem 1.5rem; max-width: 1400px; margin: 0 auto;
+      }
+      .card {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      }
+      #sidebar {
+        width: 320px; flex-shrink: 0; padding: 1rem;
+        display: flex; flex-direction: column; gap: .9rem;
+      }
+      #viewerCard { flex: 1; min-width: 0; overflow: hidden; }
+      @media (max-width: 900px) {
+        main { flex-direction: column; }
+        #sidebar { width: 100%; }
+      }
+
+      /* ---- sidebar controls ---- */
       #drop {
-        border: 2px dashed #3a3f4b; border-radius: 12px; padding: 2.5rem;
-        text-align: center; color: #9aa0ab; transition: border-color .15s, background .15s;
+        border: 1.5px dashed #4a4f57; border-radius: 8px; padding: 1.6rem .75rem;
+        text-align: center; color: var(--muted);
+        transition: border-color .15s, background .15s;
       }
-      #drop.hover { border-color: #6ea8fe; background: #1b1e26; }
-      .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin: 1.25rem 0; }
-      label { color: #c4c9d4; }
-      select, button {
-        font: inherit; background: #232734; color: #e7e9ee; border: 1px solid #3a3f4b;
-        border-radius: 8px; padding: .45rem .7rem;
+      #drop.hover { border-color: var(--accent); background: #1f2025; }
+      #drop label { color: var(--accent); text-decoration: underline; cursor: pointer; }
+      .field { display: flex; flex-direction: column; gap: .3rem; }
+      .field > span { font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+      select, input[type="text"], input[type="number"] {
+        font: inherit; background: var(--surface-2); color: var(--text);
+        border: 1px solid var(--border-2); border-radius: 6px; padding: .45rem .6rem;
+        width: 100%;
       }
-      button { cursor: pointer; }
-      button:disabled { opacity: .5; cursor: not-allowed; }
-      button.primary { background: #2b6cff; border-color: #2b6cff; }
-      canvas { max-width: 320px; border-radius: 8px; image-rendering: pixelated; background: #0c0d10; }
-      #log { white-space: pre-wrap; font-family: ui-monospace, monospace; color: #9aa0ab; margin-top: 1rem; }
-      .panel { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem; }
-      .gpu { font-size: .85rem; color: #7e8694; }
+      select:focus, input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+      .inline { display: flex; gap: .5rem; align-items: center; }
+      .inline input[type="number"] { width: 5.2rem; }
+      label.check { display: flex; gap: .45rem; align-items: center; color: #d1d5db; cursor: pointer; }
+      input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+      button.primary {
+        font: inherit; font-weight: 700; cursor: pointer;
+        background: var(--accent); color: var(--accent-text);
+        border: none; border-radius: 6px; padding: .6rem .9rem;
+        transition: background .15s;
+      }
+      button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+      button.primary:disabled { opacity: .45; cursor: not-allowed; }
+
+      /* ---- stats ---- */
+      #stats { border-top: 1px solid var(--border); padding-top: .8rem; display: none; }
+      #stats.show { display: block; }
+      .stat-big { color: var(--accent); font-size: 1.15rem; font-weight: 800; margin-bottom: .35rem; }
+      .stat-row { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); padding: .12rem 0; }
+      .stat-row b { color: var(--text); font-weight: 600; }
+      .stat-row b.good { color: var(--good); }
+
+      /* ---- viewer ---- */
+      .tabs {
+        display: flex; gap: .4rem; padding: .6rem .75rem;
+        border-bottom: 1px solid var(--border); align-items: center;
+      }
+      .tabs button {
+        font: inherit; font-size: .8rem; cursor: pointer;
+        background: var(--surface-2); color: var(--muted);
+        border: 1px solid transparent; border-radius: 5px; padding: .25rem .7rem;
+      }
+      .tabs button.active { background: var(--accent); color: var(--accent-text); font-weight: 700; }
+      .tabs button:disabled { opacity: .45; cursor: not-allowed; }
+      .tabs .hint { margin-left: auto; font-size: .75rem; color: var(--muted); }
+
+      #viewer { position: relative; background:
+        repeating-conic-gradient(#16181d 0% 25%, #101216 0% 50%) 0 0 / 24px 24px;
+        min-height: 320px; display: flex; align-items: center; justify-content: center;
+        overflow: hidden; user-select: none;
+      }
+      #viewer .placeholder { color: var(--muted); font-size: .9rem; padding: 4rem 1rem; }
+      #stage { position: relative; line-height: 0; max-width: 100%; }
+      #stage canvas { image-rendering: pixelated; display: block; max-width: 100%; }
+      #stage [hidden], #viewer [hidden] { display: none !important; }
+      /* upscale small textures so they're inspectable and the labels fit */
+      #stage.small:not(.side) { width: min(384px, 100%); }
+      #stage.small:not(.side) canvas { width: 100%; height: auto; }
+      #outWrap { position: absolute; inset: 0; }
+      #outWrap canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+      .img-label {
+        position: absolute; top: 8px; font-size: .68rem; font-weight: 600; letter-spacing: .05em;
+        background: rgba(21, 24, 28, .8); color: #d1d5db; padding: .15rem .5rem; border-radius: 4px;
+        pointer-events: none; z-index: 3;
+      }
+      #labelL { left: 8px; }
+      #labelR { right: 8px; }
+      #handle {
+        position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent);
+        cursor: ew-resize; z-index: 2;
+      }
+      #handle::after {
+        content: "⇆"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+        color: var(--accent-text); font-size: 13px; display: flex; align-items: center; justify-content: center;
+      }
+      /* side-by-side mode */
+      #stage.side { display: flex; gap: 8px; width: 100%; }
+      #stage.side > canvas, #stage.side #outWrap { flex: 1 1 0; min-width: 0; }
+      #stage.side #outWrap { position: static; }
+      #stage.side canvas { position: static; width: 100%; height: auto; clip-path: none !important; }
+      #stage.side #handle, #stage.diff #handle { display: none; }
+
+      #log {
+        white-space: pre-wrap; font-family: ui-monospace, "Cascadia Mono", monospace;
+        font-size: .78rem; color: var(--muted);
+        border-top: 1px solid var(--border); padding: .6rem .75rem; min-height: 2.2rem;
+      }
     </style>
   </head>
   <body>
-    <h1>texconv-js</h1>
-    <p class="sub">A WebGPU port of Microsoft DirectXTex <code>texconv</code>. <span class="gpu" id="gpu"></span></p>
+    <header>
+      <span class="logo-mark">t</span>
+      <span class="logo-name">texconv<em>-js</em></span>
+      <span class="tagline">WebGPU port of DirectXTex texconv</span>
+      <span class="gpu" id="gpu"></span>
+    </header>
 
-    <div id="drop">Drop an image here, or <label style="text-decoration: underline; cursor: pointer">browse<input id="file" type="file" accept="image/*" hidden /></label></div>
+    <main>
+      <div id="sidebar" class="card">
+        <div id="drop">Drop an image here<br />or <label>browse<input id="file" type="file" accept="image/*" hidden /></label></div>
 
-    <div class="row">
-      <label for="format">Output format</label>
-      <select id="format">
-        <option value="R8G8B8A8_UNORM">R8G8B8A8_UNORM (uncompressed)</option>
-        <option value="R8G8B8A8_UNORM_SRGB">R8G8B8A8_UNORM_SRGB (uncompressed)</option>
-        <option value="BC7_UNORM">BC7_UNORM (GPU)</option>
-        <option value="BC7_UNORM_SRGB">BC7_UNORM_SRGB (GPU)</option>
-        <option value="BC1_UNORM">BC1_UNORM (GPU)</option>
-        <option value="BC2_UNORM">BC2_UNORM (GPU)</option>
-        <option value="BC3_UNORM">BC3_UNORM (GPU)</option>
-        <option value="BC4_UNORM">BC4_UNORM — red (GPU)</option>
-        <option value="BC5_UNORM">BC5_UNORM — RG (GPU)</option>
-        <option value="BC6H_UF16" disabled>BC6H_UF16 (HDR, later)</option>
-      </select>
-      <label><input type="checkbox" id="mips" /> Generate mipmaps</label>
-      <label>Resize <input id="rw" type="number" min="1" placeholder="w" style="width:5rem" /> ×
-        <input id="rh" type="number" min="1" placeholder="h" style="width:5rem" /></label>
-      <button id="convert" class="primary" disabled>Convert &amp; download .dds</button>
-    </div>
+        <div class="field">
+          <span>Output format</span>
+          <select id="format">
+            <option value="R8G8B8A8_UNORM">R8G8B8A8_UNORM (uncompressed)</option>
+            <option value="R8G8B8A8_UNORM_SRGB">R8G8B8A8_UNORM_SRGB (uncompressed)</option>
+            <option value="BC7_UNORM" selected>BC7_UNORM (GPU)</option>
+            <option value="BC7_UNORM_SRGB">BC7_UNORM_SRGB (GPU)</option>
+            <option value="BC1_UNORM">BC1_UNORM (GPU)</option>
+            <option value="BC2_UNORM">BC2_UNORM (GPU)</option>
+            <option value="BC3_UNORM">BC3_UNORM (GPU)</option>
+            <option value="BC4_UNORM">BC4_UNORM — red (GPU)</option>
+            <option value="BC5_UNORM">BC5_UNORM — RG (GPU)</option>
+            <option value="BC6H_UF16" disabled>BC6H_UF16 (HDR, later)</option>
+          </select>
+        </div>
 
-    <div class="row">
-      <label for="args" title="Overrides the controls above when non-empty">texconv args</label>
-      <input id="args" type="text" placeholder="-f BC7_UNORM -m 0 -w 256" style="flex:1;min-width:18rem" />
-    </div>
+        <div class="inline">
+          <label class="check"><input type="checkbox" id="mips" /> Mipmaps</label>
+        </div>
 
-    <div class="panel">
-      <div>
-        <div class="gpu">Source</div>
-        <canvas id="preview" width="320" height="320"></canvas>
+        <div class="field">
+          <span>Resize</span>
+          <div class="inline">
+            <input id="rw" type="number" min="1" placeholder="width" /> ×
+            <input id="rh" type="number" min="1" placeholder="height" />
+          </div>
+        </div>
+
+        <div class="field">
+          <span title="Overrides the controls above when non-empty">texconv args</span>
+          <input id="args" type="text" placeholder="-f BC7_UNORM -m 0 -w 256" />
+        </div>
+
+        <button id="convert" class="primary" disabled>Convert &amp; download .dds</button>
+
+        <div id="stats">
+          <div class="stat-big" id="statSaved"></div>
+          <div class="stat-row"><span>Input file</span><b id="statInput"></b></div>
+          <div class="stat-row"><span>Uncompressed RGBA</span><b id="statRaw"></b></div>
+          <div class="stat-row"><span>Output .dds</span><b id="statDds"></b></div>
+          <div class="stat-row"><span>Ratio</span><b id="statRatio"></b></div>
+          <div class="stat-row"><span>PSNR vs source</span><b class="good" id="statPsnr"></b></div>
+          <div class="stat-row"><span>Encode time</span><b id="statTime"></b></div>
+        </div>
       </div>
-      <div>
-        <div class="gpu">Decoded output (round-trip)</div>
-        <canvas id="outpreview" width="320" height="320"></canvas>
-      </div>
-    </div>
 
-    <div id="log"></div>
+      <div id="viewerCard" class="card">
+        <div class="tabs">
+          <button id="modeSlider" class="active" disabled>Slider</button>
+          <button id="modeSide" disabled>Side-by-side</button>
+          <button id="modeDiff" disabled>Diff ×8</button>
+          <span class="hint" id="viewerHint">drop an image, then convert</span>
+        </div>
+        <div id="viewer">
+          <div class="placeholder" id="viewerPlaceholder">No image loaded</div>
+          <div id="stage" hidden>
+            <canvas id="srcCanvas"></canvas>
+            <div id="outWrap"><canvas id="outCanvas"></canvas></div>
+            <canvas id="diffCanvas" hidden></canvas>
+            <div id="handle"></div>
+            <span class="img-label" id="labelL">SOURCE</span>
+            <span class="img-label" id="labelR"></span>
+          </div>
+        </div>
+        <div id="log"></div>
+      </div>
+    </main>
 
     <script type="module" src="./main.ts"></script>
   </body>

@@ -16,35 +16,46 @@ import {
 import { decodeBC7 } from "../src/bc7_decode.js";
 import { decodeBCn } from "../src/bcn_decode.js";
 import { isCompressed } from "../src/dxgi.js";
+import { CompareViewer } from "./compare.js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const drop = $("drop");
 const fileInput = $<HTMLInputElement>("file");
 const formatSel = $<HTMLSelectElement>("format");
 const convertBtn = $<HTMLButtonElement>("convert");
-const preview = $<HTMLCanvasElement>("preview");
-const outPreview = $<HTMLCanvasElement>("outpreview");
 const logEl = $("log");
 const gpuEl = $("gpu");
+const hintEl = $("viewerHint");
+const statsEl = $("stats");
+
+const viewer = new CompareViewer();
 
 let current: Image | null = null;
 let currentName = "texture";
+let currentFileBytes = 0;
 
 function log(msg: string) {
   logEl.textContent += msg + "\n";
+}
+
+function fmtBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
 }
 
 // Probe for an actual adapter, not just navigator.gpu — on Linux Chromium the API
 // can be present while no adapter exists (WebGPU/Vulkan gated behind flags).
 async function probeGPU() {
   if (!("gpu" in navigator)) {
-    gpuEl.textContent = "WebGPU NOT available in this browser — only uncompressed output works";
+    gpuEl.textContent = "WebGPU NOT available — only uncompressed output works";
     return;
   }
   try {
     const adapter = await navigator.gpu.requestAdapter();
     if (adapter) {
-      gpuEl.textContent = "WebGPU adapter ready ✓";
+      gpuEl.textContent = "● WebGPU ready";
+      gpuEl.classList.add("ok");
     } else {
       gpuEl.innerHTML =
         "WebGPU present but <b>no GPU adapter</b> — on Linux Chromium enable " +
@@ -60,23 +71,14 @@ void probeGPU();
 async function setImage(file: File) {
   logEl.textContent = "";
   currentName = file.name.replace(/\.[^.]+$/, "");
+  currentFileBytes = file.size;
   log(`Loading ${file.name} …`);
   current = await loadImageRGBA8(file);
-  log(`Decoded ${current.width}×${current.height} RGBA8 (${current.pixels.byteLength} bytes)`);
-  drawTo(preview, current);
+  log(`Decoded ${current.width}×${current.height} RGBA8 (${fmtBytes(current.pixels.byteLength)})`);
+  viewer.showSource(current);
+  statsEl.classList.remove("show");
+  hintEl.textContent = "convert to compare";
   convertBtn.disabled = false;
-}
-
-// Draw an R8G8B8A8 Image (which may carry row padding) into a canvas.
-function drawTo(canvas: HTMLCanvasElement, img: Image) {
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext("2d")!;
-  const tight = new Uint8ClampedArray(img.width * img.height * 4);
-  for (let y = 0; y < img.height; y++) {
-    tight.set(img.pixels.subarray(y * img.rowPitch, y * img.rowPitch + img.width * 4), y * img.width * 4);
-  }
-  ctx.putImageData(new ImageData(tight, img.width, img.height), 0, 0);
 }
 
 const mipsCb = $<HTMLInputElement>("mips");
@@ -111,17 +113,38 @@ convertBtn.addEventListener("click", async () => {
     const t0 = performance.now();
     const scratch = await convert(current, options);
     const dds = writeDDS(scratch);
-    const ms = (performance.now() - t0).toFixed(1);
-    log(`Done in ${ms} ms → ${scratch.metadata.mipLevels} mip(s), ${dds.byteLength} byte .dds`);
+    const ms = performance.now() - t0;
+    log(`Done in ${ms.toFixed(1)} ms → ${scratch.metadata.mipLevels} mip(s), ${fmtBytes(dds.byteLength)} .dds`);
 
-    // Round-trip preview so the user can eyeball compression quality.
+    // Round-trip the base level so the viewer compares what the GPU actually encoded.
+    let decoded: Image;
     if (format === DXGI_FORMAT.BC7_UNORM || format === DXGI_FORMAT.BC7_UNORM_SRGB) {
-      drawTo(outPreview, decodeBC7(scratch.baseImage));
+      decoded = decodeBC7(scratch.baseImage);
     } else if (isCompressed(format)) {
-      drawTo(outPreview, decodeBCn(scratch.baseImage));
+      decoded = decodeBCn(scratch.baseImage);
     } else {
-      drawTo(outPreview, scratch.baseImage);
+      decoded = scratch.baseImage;
     }
+    const quality = viewer.setImages(current, decoded, DXGI_FORMAT[format]);
+    hintEl.textContent = "drag the divider to compare";
+
+    // Compression differential: the .dds payload vs the same images uncompressed.
+    const rawBytes = scratch.images.reduce((sum, img) => sum + img.width * img.height * 4, 0);
+    const saved = 1 - dds.byteLength / rawBytes;
+    $("statSaved").textContent =
+      saved > 0.005
+        ? `▼ ${(saved * 100).toFixed(1)}% smaller`
+        : "no compression (uncompressed format)";
+    $("statInput").textContent = fmtBytes(currentFileBytes);
+    $("statRaw").textContent = fmtBytes(rawBytes);
+    $("statDds").textContent = fmtBytes(dds.byteLength);
+    $("statRatio").textContent = `${(rawBytes / dds.byteLength).toFixed(2)} : 1`;
+    $("statPsnr").textContent = isCompressed(format)
+      ? (quality === Infinity ? "lossless" : `${quality.toFixed(1)} dB`)
+      : "lossless";
+    $("statTime").textContent = `${ms.toFixed(1)} ms`;
+    statsEl.classList.add("show");
+
     downloadBytes(dds, filename, "image/vnd-ms.dds");
   } catch (err) {
     log(`Error: ${(err as Error).message}`);

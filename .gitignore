@@ -4,3 +4,4 @@ dist-demo/
 *.log
 .DS_Store
 .vite/
+.superpowers/
