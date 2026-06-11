@@ -34,7 +34,28 @@ function log(msg: string) {
   logEl.textContent += msg + "\n";
 }
 
-gpuEl.textContent = "gpu" in navigator ? "WebGPU available ✓" : "WebGPU NOT available — only uncompressed output works";
+// Probe for an actual adapter, not just navigator.gpu — on Linux Chromium the API
+// can be present while no adapter exists (WebGPU/Vulkan gated behind flags).
+async function probeGPU() {
+  if (!("gpu" in navigator)) {
+    gpuEl.textContent = "WebGPU NOT available in this browser — only uncompressed output works";
+    return;
+  }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (adapter) {
+      gpuEl.textContent = "WebGPU adapter ready ✓";
+    } else {
+      gpuEl.innerHTML =
+        "WebGPU present but <b>no GPU adapter</b> — on Linux Chromium enable " +
+        "<code>chrome://flags/#enable-unsafe-webgpu</code> (and <code>#enable-vulkan</code>), " +
+        "restart, and check <code>chrome://gpu</code>.";
+    }
+  } catch (e) {
+    gpuEl.textContent = `WebGPU adapter error: ${(e as Error).message}`;
+  }
+}
+void probeGPU();
 
 async function setImage(file: File) {
   logEl.textContent = "";

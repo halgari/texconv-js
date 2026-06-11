@@ -40,6 +40,24 @@ segfault-on-exit that would otherwise be reported as a failure. The BC7 encoder 
 verified by compressing test images, decoding the result with the reference BC7
 decoder (`src/bc7_decode.ts`), and asserting PSNR (≈41 dB on a smooth gradient).
 
+## Troubleshooting: "no GPU adapter available"
+
+If `navigator.gpu` exists but `requestAdapter()` returns `null` (common on **Linux
+Chromium**), WebGPU is present but gated behind flags/drivers:
+
+1. Open `chrome://flags`, enable **Unsafe WebGPU Support**
+   (`#enable-unsafe-webgpu`) and, if present, **Vulkan** (`#enable-vulkan`).
+2. Restart the browser.
+3. Open `chrome://gpu` and confirm **WebGPU** shows *Enabled* / a Vulkan device.
+   If WebGPU is "Disabled" or "Software only", your GPU/driver may be on Chromium's
+   blocklist — launch with:
+   ```
+   chromium --enable-unsafe-webgpu --enable-features=Vulkan
+   ```
+   (some setups also need `--use-angle=vulkan` or `--ignore-gpu-blocklist`).
+
+Firefox Nightly and Chrome/Edge on Windows/macOS generally work without flags.
+
 ## Architecture
 
 ```

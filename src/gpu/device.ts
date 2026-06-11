@@ -34,8 +34,21 @@ export async function getDevice(fresh = false): Promise<GPUDevice> {
   if (cached && !fresh) return cached;
   cached = (async () => {
     const gpu = await getGPU();
-    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
-    if (!adapter) throw new Error("WebGPU: no GPU adapter available");
+    // Try progressively weaker requests: a real high-perf adapter, then any
+    // adapter, then the CPU fallback adapter. On Linux Chromium a null adapter
+    // usually means WebGPU/Vulkan is still gated behind flags.
+    const adapter =
+      (await gpu.requestAdapter({ powerPreference: "high-performance" })) ??
+      (await gpu.requestAdapter()) ??
+      (await gpu.requestAdapter({ forceFallbackAdapter: true }));
+    if (!adapter) {
+      throw new Error(
+        "WebGPU reported support (navigator.gpu) but no GPU adapter is available. " +
+          "On Linux Chromium this is usually a flag/driver issue — enable " +
+          "chrome://flags/#enable-unsafe-webgpu (and #enable-vulkan), restart, and " +
+          "check chrome://gpu shows WebGPU as enabled. See the README troubleshooting section.",
+      );
+    }
     const device = await adapter.requestDevice();
     device.lost.then(() => {
       // Drop the cache so the next call re-acquires.
