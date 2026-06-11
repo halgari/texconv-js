@@ -1,29 +1,17 @@
 //-------------------------------------------------------------------------------------
 // gpu/device.ts
 //
-// WebGPU device acquisition that works both in the browser (navigator.gpu) and in
-// headless Node (the Dawn-based `webgpu` package, used for tests).
+// WebGPU device acquisition via the browser's navigator.gpu. Tests run in real
+// Chromium (vitest browser mode), so there is no separate headless code path.
 //-------------------------------------------------------------------------------------
 
 let cached: Promise<GPUDevice> | null = null;
 
-/** Obtain the platform GPU object (browser navigator.gpu, or Dawn in Node). */
-async function getGPU(): Promise<GPU> {
+function getGPU(): GPU {
   if (typeof navigator !== "undefined" && navigator.gpu) {
     return navigator.gpu;
   }
-  // Headless Node fallback (tests). Imported dynamically so browser bundles never
-  // try to resolve the native module.
-  try {
-    const mod: any = await import(/* @vite-ignore */ "webgpu");
-    const create = mod.create ?? mod.default?.create;
-    if (typeof create === "function") {
-      return create([]) as GPU;
-    }
-  } catch {
-    /* fall through to error below */
-  }
-  throw new Error("WebGPU is not available (no navigator.gpu and no headless `webgpu` module)");
+  throw new Error("WebGPU is not available (no navigator.gpu in this environment)");
 }
 
 /**
@@ -33,7 +21,7 @@ async function getGPU(): Promise<GPU> {
 export async function getDevice(fresh = false): Promise<GPUDevice> {
   if (cached && !fresh) return cached;
   cached = (async () => {
-    const gpu = await getGPU();
+    const gpu = getGPU();
     // Try progressively weaker requests: a real high-perf adapter, then any
     // adapter, then the CPU fallback adapter. On Linux Chromium a null adapter
     // usually means WebGPU/Vulkan is still gated behind flags.
@@ -64,9 +52,8 @@ export function alignUp(value: number, align: number): number {
   return Math.ceil(value / align) * align;
 }
 
-// WebGPU bitflag constants. In browsers these exist as globals (GPUBufferUsage,
-// etc.), but the headless Dawn module doesn't define them globally, so we use the
-// spec's fixed numeric values for portability.
+// WebGPU bitflag constants (GPUBufferUsage etc.) by their spec-fixed numeric
+// values, so importing modules don't depend on browser globals.
 export const ShaderStage = { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 } as const;
 export const BufferUsage = {
   MAP_READ: 0x0001,

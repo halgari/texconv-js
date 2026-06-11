@@ -9,11 +9,5 @@ export default defineConfig({
     outDir: "../dist-demo",
     emptyOutDir: true,
     target: "esnext",
-    rollupOptions: {
-      // The headless Dawn `webgpu` module is Node-only (test/dev). In the browser
-      // the navigator.gpu path is used, so keep it external rather than bundling it.
-      external: ["webgpu"],
-    },
   },
-  optimizeDeps: { exclude: ["webgpu"] },
 });

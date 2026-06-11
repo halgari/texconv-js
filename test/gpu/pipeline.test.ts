@@ -1,13 +1,15 @@
 //-------------------------------------------------------------------------------------
-// GPU pipeline test: resize, mip generation, and DDS round-trip. Run via vite-node.
+// GPU pipeline test: resize, mip generation, and DDS round-trip. Runs in headless
+// Chromium via vitest browser mode.
 //-------------------------------------------------------------------------------------
 
+import { beforeAll, expect, test } from "vitest";
 import { DXGI_FORMAT } from "../../src/dxgi.js";
 import { makeImage, countMips, type Image } from "../../src/image.js";
 import { resizeImage } from "../../src/gpu/resize.js";
 import { convert } from "../../src/texconv.js";
 import { writeDDS, readDDS } from "../../src/dds.js";
-import { check } from "./harness.js";
+import { getDevice } from "../../src/gpu/device.js";
 
 function gradient(width: number, height: number): Image {
   const img = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, width, height);
@@ -34,46 +36,50 @@ function flat(width: number, height: number, rgba: [number, number, number, numb
   return img;
 }
 
-export async function run(device: GPUDevice): Promise<void> {
-// Resize: flat color must be preserved exactly.
-{
+let device: GPUDevice;
+beforeAll(async () => {
+  device = await getDevice();
+});
+
+test("resize 64->16 preserves flat color", async () => {
   const src = flat(64, 64, [10, 200, 50, 255]);
   const out = await resizeImage(device, src, 16, 16, false);
-  const ok = out.width === 16 && out.height === 16 &&
-    out.pixels[0] === 10 && out.pixels[1] === 200 && out.pixels[2] === 50 && out.pixels[3] === 255;
-  check("resize 64->16 preserves flat color", ok, `${out.pixels[0]},${out.pixels[1]},${out.pixels[2]}`);
-}
+  expect(out.width).toBe(16);
+  expect(out.height).toBe(16);
+  expect([out.pixels[0], out.pixels[1], out.pixels[2], out.pixels[3]]).toEqual([10, 200, 50, 255]);
+});
 
-// Resize: downscale a 2x2-block constant pattern halves correctly.
-{
+test("resize 64->32 dims + plausible value", async () => {
   const src = gradient(64, 64);
   const out = await resizeImage(device, src, 32, 32, false);
   // Center pixel should be ~midrange; just sanity-check bounds and dims.
   const mid = out.pixels[(16 * out.rowPitch) + 16 * 4];
-  check("resize 64->32 dims + plausible value", out.width === 32 && out.height === 32 && mid > 100 && mid < 160, `mid R=${mid}`);
-}
+  expect(out.width).toBe(32);
+  expect(out.height).toBe(32);
+  expect(mid, `mid R=${mid}`).toBeGreaterThan(100);
+  expect(mid, `mid R=${mid}`).toBeLessThan(160);
+});
 
-// Full mip chain to BC3, then DDS round-trip.
-{
+test("full mip chain to BC3, then DDS round-trip", async () => {
   const src = gradient(64, 48);
   const scratch = await convert(src, { format: DXGI_FORMAT.BC3_UNORM, mipLevels: 0 });
   const expected = countMips(64, 48); // 64x48 -> 7 levels
-  check("mip chain level count", scratch.metadata.mipLevels === expected, `${scratch.metadata.mipLevels} (want ${expected})`);
-  check("base level is 64x48", scratch.images[0].width === 64 && scratch.images[0].height === 48);
-  check("last level is 1x1", scratch.images[scratch.images.length - 1].width === 1);
+  expect(scratch.metadata.mipLevels).toBe(expected);
+  expect(scratch.images[0].width).toBe(64);
+  expect(scratch.images[0].height).toBe(48);
+  expect(scratch.images[scratch.images.length - 1].width).toBe(1);
 
   const dds = writeDDS(scratch);
   const back = readDDS(dds);
-  check("DDS round-trip format", back.metadata.format === DXGI_FORMAT.BC3_UNORM);
-  check("DDS round-trip mip count", back.metadata.mipLevels === expected, `${back.metadata.mipLevels}`);
-  check("DDS round-trip base bytes match", back.images[0].pixels[0] === scratch.images[0].pixels[0]);
-}
+  expect(back.metadata.format).toBe(DXGI_FORMAT.BC3_UNORM);
+  expect(back.metadata.mipLevels).toBe(expected);
+  expect(back.images[0].pixels[0]).toBe(scratch.images[0].pixels[0]);
+});
 
-// Resize + compress combined.
-{
+test("resize + compress combined", async () => {
   const src = gradient(100, 100);
   const scratch = await convert(src, { format: DXGI_FORMAT.BC1_UNORM, width: 64, height: 64 });
-  check("resize+compress base dims", scratch.images[0].width === 64 && scratch.images[0].height === 64);
-  check("resize+compress format", scratch.metadata.format === DXGI_FORMAT.BC1_UNORM);
-}
-}
+  expect(scratch.images[0].width).toBe(64);
+  expect(scratch.images[0].height).toBe(64);
+  expect(scratch.metadata.format).toBe(DXGI_FORMAT.BC1_UNORM);
+});

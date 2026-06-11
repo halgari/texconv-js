@@ -24,21 +24,29 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 ```bash
 npm install
 npm run dev        # serve the demo at http://localhost:5173 (needs a WebGPU browser)
-npm test           # CPU unit tests (vitest)
-npm run test:gpu   # GPU integration tests, headless via Dawn + vite-node
+npm test           # CPU unit tests (vitest, Node)
+npm run test:gpu   # GPU integration tests in headless Chromium (vitest browser mode)
 npm run test:all   # both
 npm run typecheck  # tsc --noEmit
 npm run build      # build the browser demo artifact into dist-demo/
 ```
 
+GPU tests need a one-time Playwright Chromium download:
+
+```bash
+npx playwright install chromium
+```
+
 ### Testing the GPU path
 
-GPU tests run headlessly through the Dawn-based `webgpu` package under `vite-node`
-(so WGSL `?raw` imports and TS work in plain Node). Each suite runs in its own
-process and `process.exit(0)`s before Dawn's teardown — a known node-webgpu
-segfault-on-exit that would otherwise be reported as a failure. The BC7 encoder is
-verified by compressing test images, decoding the result with the reference BC7
-decoder (`src/bc7_decode.ts`), and asserting PSNR (≈41 dB on a smooth gradient).
+GPU tests run in real headless Chromium via vitest browser mode (Playwright
+provider), i.e. against the same `navigator.gpu` path the library uses in
+production. Chromium is launched with the Linux WebGPU flags
+(`--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan`); see
+`vitest.config.ts`. If headless WebGPU misbehaves on your driver, set
+`headless: false` there as an escape hatch. The BC7 encoder is verified by
+compressing test images, decoding the result with the reference BC7 decoder
+(`src/bc7_decode.ts`), and asserting PSNR (≈41 dB on a smooth gradient).
 
 ## Troubleshooting: "no GPU adapter available"
 
