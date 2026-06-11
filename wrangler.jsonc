@@ -1,0 +1,15 @@
+// Cloudflare Workers static-assets deployment for the texconv-js demo.
+// `npm run deploy` builds dist-demo/ and uploads it; the custom_domain route
+// auto-provisions the texconv.baldridge.work DNS record + cert (the
+// baldridge.work zone must exist in the Cloudflare account).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "texconv-demo",
+  "compatibility_date": "2026-06-11",
+  "assets": {
+    "directory": "./dist-demo"
+  },
+  "routes": [
+    { "pattern": "texconv.baldridge.work", "custom_domain": true }
+  ]
+}
