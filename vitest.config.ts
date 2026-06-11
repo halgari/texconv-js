@@ -7,5 +7,10 @@ export default defineConfig({
     root: ".",
     include: ["test/**/*.test.ts"],
     environment: "node",
+    // The native Dawn (webgpu) addon is unstable in worker threads; use a single
+    // forked child process with no isolation.
+    pool: "forks",
+    poolOptions: { forks: { singleFork: true, isolate: false } },
+    testTimeout: 30000,
   },
 });

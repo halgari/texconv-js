@@ -10,6 +10,8 @@
 
 import { DXGI_FORMAT, isCompressed } from "./dxgi.js";
 import { ScratchImage, type Image } from "./image.js";
+import { getDevice } from "./gpu/device.js";
+import { compressBC7 } from "./gpu/compressBC.js";
 
 export interface ConvertOptions {
   /** Target DXGI format (texconv -f). */
@@ -39,9 +41,7 @@ export async function convert(source: Image, options: ConvertOptions): Promise<S
   }
 
   if (isCompressed(options.format)) {
-    throw new Error(
-      `convert: GPU block compression to ${DXGI_FORMAT[options.format]} not yet wired (M2+)`,
-    );
+    return compressGPU(source, options);
   }
 
   if (options.format === source.format) {
@@ -62,4 +62,23 @@ export async function convert(source: Image, options: ConvertOptions): Promise<S
   throw new Error(
     `convert: uncompressed conversion ${DXGI_FORMAT[source.format]} -> ${DXGI_FORMAT[options.format]} not yet implemented`,
   );
+}
+
+/** Route a compressed-target conversion to the appropriate GPU encoder. */
+async function compressGPU(source: Image, options: ConvertOptions): Promise<ScratchImage> {
+  const device = await getDevice();
+  switch (options.format) {
+    case DXGI_FORMAT.BC7_UNORM:
+    case DXGI_FORMAT.BC7_UNORM_SRGB: {
+      const bc7 = await compressBC7(device, source, {
+        format: options.format,
+        alphaWeight: options.alphaWeight ?? 1,
+      });
+      return ScratchImage.from2D(bc7);
+    }
+    default:
+      throw new Error(
+        `convert: GPU compression to ${DXGI_FORMAT[options.format]} not yet implemented (BC6H=M3, BC1-5=M4)`,
+      );
+  }
 }

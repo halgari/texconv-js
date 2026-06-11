@@ -13,7 +13,7 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 | Milestone | Scope | State |
 |-----------|-------|-------|
 | **M1** | Scaffold, DXGI format tables, pitch, DDS read/write, PNG→DDS demo | ✅ done |
-| M2 | BC7 GPU encoder (WGSL + orchestrator port of `BCDirectCompute.cpp`) | ⏳ |
+| **M2** | BC7 GPU encoder (WGSL + orchestrator port of `BCDirectCompute.cpp`) | ✅ done |
 | M3 | BC6H GPU encoder + HDR (.hdr) input | ⏳ |
 | M4 | New WGSL BC1/2/3/4/5 GPU encoders | ⏳ |
 | M5 | Mipmaps, resize, sRGB, DDS reader/preview | ⏳ |
@@ -24,10 +24,21 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 ```bash
 npm install
 npm run dev        # serve the demo at http://localhost:5173 (needs a WebGPU browser)
-npm test           # unit tests (vitest)
+npm test           # CPU unit tests (vitest)
+npm run test:gpu   # GPU integration tests, headless via Dawn + vite-node
+npm run test:all   # both
 npm run typecheck  # tsc --noEmit
 npm run build      # build the browser demo artifact into dist-demo/
 ```
+
+### Testing the GPU path
+
+GPU tests run headlessly through the Dawn-based `webgpu` package under `vite-node`
+(so WGSL `?raw` imports and TS work in plain Node). Each suite runs in its own
+process and `process.exit(0)`s before Dawn's teardown — a known node-webgpu
+segfault-on-exit that would otherwise be reported as a failure. The BC7 encoder is
+verified by compressing test images, decoding the result with the reference BC7
+decoder (`src/bc7_decode.ts`), and asserting PSNR (≈41 dB on a smooth gradient).
 
 ## Architecture
 

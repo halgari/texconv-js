@@ -16,7 +16,9 @@
     "build:lib": "vite build --config vite.lib.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --config vitest.config.ts"
+    "test": "vitest run --config vitest.config.ts",
+    "test:gpu": "node test/gpu/run-all.mjs",
+    "test:all": "npm run test && npm run test:gpu"
   },
   "keywords": [
     "texture",
@@ -30,6 +32,7 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^25.9.3",
     "@webgpu/types": "^0.1.60",
     "typescript": "^5.6.0",
     "vite": "^6.0.0",
