@@ -13,7 +13,9 @@ import { decodeBC7 } from "../../src/bc7_decode.js";
 import { decodeBCn } from "../../src/bcn_decode.js";
 import { check, report } from "./harness.js";
 
-const W = 1280, H = 1024; // 81920 blocks > 65535 -> would overflow a 1D dispatch
+// 1024x1024 = 256x256 = 65536 blocks, just over WebGPU's 65535 cap — the smallest
+// size that still forces the multi-batch / 2D-dispatch path (keeps the test cheap).
+const W = 1024, H = 1024;
 const img: Image = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, W, H);
 for (let y = 0; y < H; y++) {
   for (let x = 0; x < W; x++) {
