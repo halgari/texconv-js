@@ -15,6 +15,8 @@ import {
 } from "../src/index.js";
 import { decodeBC7 } from "../src/bc7_decode.js";
 import { decodeBCn } from "../src/bcn_decode.js";
+import { decodeBC6H } from "../src/bc6h_decode.js";
+import { isHDRFile, loadHDR, rgba8ToLinearFloat, tonemapToRGBA8 } from "../src/hdr.js";
 import { isCompressed } from "../src/dxgi.js";
 import { CompareViewer } from "./compare.js";
 
@@ -32,6 +34,8 @@ const statsEl = $("stats");
 const viewer = new CompareViewer();
 
 let current: Image | null = null;
+/** Displayable (tonemapped if HDR) version of `current` for the compare viewer. */
+let currentDisplay: Image | null = null;
 let currentName = "texture";
 let currentFileBytes = 0;
 let lastDds: Uint8Array | null = null;
@@ -76,9 +80,16 @@ async function setImage(file: File) {
   currentName = file.name.replace(/\.[^.]+$/, "");
   currentFileBytes = file.size;
   log(`Loading ${file.name} …`);
-  current = await loadImageRGBA8(file);
-  log(`Decoded ${current.width}×${current.height} RGBA8 (${fmtBytes(current.pixels.byteLength)})`);
-  viewer.showSource(current);
+  if (isHDRFile(file.name)) {
+    current = loadHDR(new Uint8Array(await file.arrayBuffer()));
+    currentDisplay = tonemapToRGBA8(current);
+    log(`Decoded ${current.width}×${current.height} RGBA32F HDR (preview is tonemapped)`);
+  } else {
+    current = await loadImageRGBA8(file);
+    currentDisplay = current;
+    log(`Decoded ${current.width}×${current.height} RGBA8 (${fmtBytes(current.pixels.byteLength)})`);
+  }
+  viewer.showSource(currentDisplay);
   statsEl.classList.remove("show");
   hintEl.textContent = "convert to compare";
   convertBtn.disabled = false;
@@ -123,14 +134,23 @@ convertBtn.addEventListener("click", async () => {
 
     // Round-trip the base level so the viewer compares what the GPU actually encoded.
     let decoded: Image;
+    let compareSrc = currentDisplay ?? current;
     if (format === DXGI_FORMAT.BC7_UNORM || format === DXGI_FORMAT.BC7_UNORM_SRGB) {
       decoded = decodeBC7(scratch.baseImage);
+    } else if (format === DXGI_FORMAT.BC6H_UF16 || format === DXGI_FORMAT.BC6H_SF16) {
+      // HDR round-trip: tonemap BOTH sides identically for display/PSNR. For an
+      // LDR source that means tonemapping its linear-float expansion, the same
+      // transform the decoded output goes through.
+      decoded = tonemapToRGBA8(decodeBC6H(scratch.baseImage));
+      if (current.format !== DXGI_FORMAT.R32G32B32A32_FLOAT) {
+        compareSrc = tonemapToRGBA8(rgba8ToLinearFloat(current));
+      }
     } else if (isCompressed(format)) {
       decoded = decodeBCn(scratch.baseImage);
     } else {
       decoded = scratch.baseImage;
     }
-    const quality = viewer.setImages(current, decoded, DXGI_FORMAT[format]);
+    const quality = viewer.setImages(compareSrc, decoded, DXGI_FORMAT[format]);
     hintEl.textContent = "drag the divider to compare";
 
     // Compression differential: the .dds payload vs the same images uncompressed.

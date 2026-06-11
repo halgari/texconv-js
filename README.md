@@ -17,7 +17,12 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 | **M4** | New WGSL BC1/2/3/4/5 GPU encoders | ✅ done |
 | **M5** | GPU mipmaps, resize, sRGB-correct filtering, DDS reader/preview | ✅ done |
 | **M6** | texconv CLI option surface + demo polish | ✅ done |
-| M3 | BC6H GPU encoder + HDR (.hdr) input | ⏸ deferred (HDR) |
+| **M3** | BC6H GPU encoder (UF16/SF16) + HDR (.hdr) input | ✅ done |
+
+> BC6H matches upstream texconv's GPU encoder (`BC6HEncode.hlsl`), including its
+> `max(pixel, 0)` input clamp — negative values encode as zero even for SF16.
+> `.hdr` (Radiance RGBE) input decodes to linear float; LDR inputs are expanded
+> sRGB→linear before BC6H encoding. Mips/resize for HDR run in linear float.
 
 ## Develop
 
@@ -74,6 +79,7 @@ src/
   image.ts     Image / ScratchImage / TexMetadata (mirrors DirectXTex)
   dds.ts       DDS container read/write (DX10 extended header)
   io.ts        browser image decode (createImageBitmap → RGBA8) + download helper
+  hdr.ts       Radiance .hdr (RGBE) reader + LDR→linear-float + tonemap helpers
   texconv.ts   high-level convert(image, options) pipeline
   gpu/         WebGPU device + WGSL BC encoders + dispatch orchestrator   (M2+)
 demo/          drag-drop browser UI driving the pipeline

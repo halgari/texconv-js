@@ -16,6 +16,7 @@ struct Constants {
 @group(0) @binding(0) var<uniform> params: Constants;
 @group(0) @binding(1) var g_Input: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> g_Out: array<u32>; // packed RGBA8
+@group(0) @binding(3) var<storage, read_write> g_OutF: array<vec4<f32>>; // float path
 
 fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
   let lo = c / 12.92;
@@ -33,13 +34,8 @@ fn packRGBA8(c: vec4<f32>) -> u32 {
   return q.x | (q.y << 8u) | (q.z << 16u) | (q.w << 24u);
 }
 
-@compute @workgroup_size(8, 8)
-fn resize(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let x = gid.x;
-  let y = gid.y;
-  if (x >= params.dstW || y >= params.dstH) { return; }
-
-  // Source footprint for this destination texel (box filter).
+// Box-filtered source average for one destination texel (shared by both paths).
+fn boxAverage(x: u32, y: u32) -> vec4<f32> {
   var fx0 = (x * params.srcW) / params.dstW;
   var fy0 = (y * params.srcH) / params.dstH;
   var fx1 = ((x + 1u) * params.srcW) / params.dstW;
@@ -60,9 +56,27 @@ fn resize(@builtin(global_invocation_id) gid: vec3<u32>) {
       n += 1.0;
     }
   }
-  accum /= max(n, 1.0);
+  return accum / max(n, 1.0);
+}
+
+@compute @workgroup_size(8, 8)
+fn resize(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let x = gid.x;
+  let y = gid.y;
+  if (x >= params.dstW || y >= params.dstH) { return; }
+
+  let accum = boxAverage(x, y);
   var rgb = accum.rgb;
   if (params.srgb != 0u) { rgb = linearToSrgb(rgb); }
 
   g_Out[y * params.dstW + x] = packRGBA8(vec4<f32>(rgb, accum.a));
+}
+
+// Float (HDR) path: rgba32float input, raw vec4f output, always linear (srgb=0).
+@compute @workgroup_size(8, 8)
+fn resize_f32(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let x = gid.x;
+  let y = gid.y;
+  if (x >= params.dstW || y >= params.dstH) { return; }
+  g_OutF[y * params.dstW + x] = boxAverage(x, y);
 }

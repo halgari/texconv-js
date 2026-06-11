@@ -15,28 +15,33 @@ interface Cached {
   pipeline: GPUComputePipeline;
 }
 const cache = new WeakMap<GPUDevice, Cached>();
+const cacheF32 = new WeakMap<GPUDevice, Cached>();
 
-function getCached(device: GPUDevice): Cached {
-  let c = cache.get(device);
+function getCached(device: GPUDevice, float: boolean): Cached {
+  const store = float ? cacheF32 : cache;
+  let c = store.get(device);
   if (c) return c;
   const module = device.createShaderModule({ code: resizeWgsl, label: "resize" });
+  // The unorm and float paths write different storage bindings (2 vs 3).
   const layout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: ShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: ShaderStage.COMPUTE, texture: { sampleType: "unfilterable-float" } },
-      { binding: 2, visibility: ShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: float ? 3 : 2, visibility: ShaderStage.COMPUTE, buffer: { type: "storage" } },
     ],
   });
   const pipeline = device.createComputePipeline({
     layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
-    compute: { module, entryPoint: "resize" },
+    compute: { module, entryPoint: float ? "resize_f32" : "resize" },
   });
   c = { layout, pipeline };
-  cache.set(device, c);
+  store.set(device, c);
   return c;
 }
 
-/** Box-filter resize an R8G8B8A8 image to (dstW, dstH) on the GPU. */
+const FLOAT_FMT = DXGI_FORMAT.R32G32B32A32_FLOAT;
+
+/** Box-filter resize an R8G8B8A8 or R32G32B32A32_FLOAT image to (dstW, dstH) on the GPU. */
 export async function resizeImage(
   device: GPUDevice,
   src: Image,
@@ -44,14 +49,15 @@ export async function resizeImage(
   dstH: number,
   srgb = isSRGB(src.format),
 ): Promise<Image> {
-  if (src.format !== DXGI_FORMAT.R8G8B8A8_UNORM && src.format !== DXGI_FORMAT.R8G8B8A8_UNORM_SRGB) {
-    throw new Error("resizeImage: source must be R8G8B8A8_UNORM(_SRGB)");
+  const float = src.format === FLOAT_FMT;
+  if (!float && src.format !== DXGI_FORMAT.R8G8B8A8_UNORM && src.format !== DXGI_FORMAT.R8G8B8A8_UNORM_SRGB) {
+    throw new Error("resizeImage: source must be R8G8B8A8_UNORM(_SRGB) or R32G32B32A32_FLOAT");
   }
-  const { layout, pipeline } = getCached(device);
+  const { layout, pipeline } = getCached(device, float);
 
   const tex = device.createTexture({
     size: { width: src.width, height: src.height },
-    format: "rgba8unorm",
+    format: float ? "rgba32float" : "rgba8unorm",
     usage: TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST,
   });
   device.queue.writeTexture(
@@ -61,7 +67,7 @@ export async function resizeImage(
     { width: src.width, height: src.height },
   );
 
-  const outBytes = dstW * dstH * 4;
+  const outBytes = dstW * dstH * (float ? 16 : 4);
   const outBuf = device.createBuffer({ size: outBytes, usage: BufferUsage.STORAGE | BufferUsage.COPY_SRC });
 
   const uniform = device.createBuffer({ size: 32, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST });
@@ -71,7 +77,8 @@ export async function resizeImage(
   uv.setUint32(4, src.height, true);
   uv.setUint32(8, dstW, true);
   uv.setUint32(12, dstH, true);
-  uv.setUint32(16, srgb ? 1 : 0, true);
+  // HDR float data is linear; the sRGB transfer curve never applies to it.
+  uv.setUint32(16, srgb && !float ? 1 : 0, true);
   device.queue.writeBuffer(uniform, 0, ud);
 
   const bindGroup = device.createBindGroup({
@@ -79,7 +86,7 @@ export async function resizeImage(
     entries: [
       { binding: 0, resource: { buffer: uniform } },
       { binding: 1, resource: tex.createView() },
-      { binding: 2, resource: { buffer: outBuf } },
+      { binding: float ? 3 : 2, resource: { buffer: outBuf } },
     ],
   });
 

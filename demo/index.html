@@ -175,7 +175,7 @@
 
     <main>
       <div id="sidebar" class="card">
-        <div id="drop">Drop an image here<br />or <label>browse<input id="file" type="file" accept="image/*" hidden /></label></div>
+        <div id="drop">Drop an image here (.png/.jpg/… or .hdr)<br />or <label>browse<input id="file" type="file" accept="image/*,.hdr" hidden /></label></div>
 
         <div class="field">
           <span>Output format</span>
@@ -189,7 +189,8 @@
             <option value="BC3_UNORM">BC3_UNORM (GPU)</option>
             <option value="BC4_UNORM">BC4_UNORM — red (GPU)</option>
             <option value="BC5_UNORM">BC5_UNORM — RG (GPU)</option>
-            <option value="BC6H_UF16" disabled>BC6H_UF16 (HDR, later)</option>
+            <option value="BC6H_UF16">BC6H_UF16 — HDR (GPU)</option>
+            <option value="BC6H_SF16">BC6H_SF16 — HDR signed (GPU)</option>
           </select>
         </div>
 

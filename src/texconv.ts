@@ -13,7 +13,9 @@ import { ScratchImage, type Image } from "./image.js";
 import { getDevice } from "./gpu/device.js";
 import { compressBC7 } from "./gpu/compressBC.js";
 import { compressBCn } from "./gpu/compressBCn.js";
+import { compressBC6H } from "./gpu/compressBC6.js";
 import { resizeImage, generateMipChain } from "./gpu/resize.js";
+import { rgba8ToLinearFloat } from "./hdr.js";
 
 export interface ConvertOptions {
   /** Target DXGI format (texconv -f). */
@@ -37,30 +39,46 @@ export interface ConvertOptions {
 }
 
 const R8_FAMILY = new Set([DXGI_FORMAT.R8G8B8A8_UNORM, DXGI_FORMAT.R8G8B8A8_UNORM_SRGB]);
+const BC6H = new Set([DXGI_FORMAT.BC6H_UF16, DXGI_FORMAT.BC6H_SF16]);
 
 /**
  * Convert a source Image to the requested format/shape. The source must be in the
- * R8G8B8A8 family (what the browser image loader produces).
+ * R8G8B8A8 family (what the browser image loader produces) or linear
+ * R32G32B32A32_FLOAT (what the .hdr loader produces; only BC6H targets supported).
  */
 export async function convert(source: Image, options: ConvertOptions): Promise<ScratchImage> {
-  if (!R8_FAMILY.has(source.format)) {
-    throw new Error(`convert: source must be R8G8B8A8(_SRGB); got ${DXGI_FORMAT[source.format]}`);
+  const floatSource = source.format === DXGI_FORMAT.R32G32B32A32_FLOAT;
+  if (!floatSource && !R8_FAMILY.has(source.format)) {
+    throw new Error(
+      `convert: source must be R8G8B8A8(_SRGB) or R32G32B32A32_FLOAT; got ${DXGI_FORMAT[source.format]}`,
+    );
+  }
+  if (floatSource && !BC6H.has(options.format)) {
+    throw new Error(
+      `convert: HDR float source currently supports only BC6H targets; got ${DXGI_FORMAT[options.format]}`,
+    );
+  }
+  // BC6H is a linear HDR format: expand 8-bit sources to linear float up front so
+  // resize/mips/encode all run in linear light (texconv converts to float the same way).
+  let src = source;
+  if (!floatSource && BC6H.has(options.format)) {
+    src = rgba8ToLinearFloat(source, options.srgbFilter ?? true);
   }
 
   const wantResize = !!(options.width || options.height);
   const mipLevels = options.mipLevels ?? 1;
   const wantMips = mipLevels !== 1;
-  const srgbFilter = options.srgbFilter ?? isSRGB(source.format);
+  const srgbFilter = options.srgbFilter ?? isSRGB(src.format);
 
   const needGPU = wantResize || wantMips || isCompressed(options.format);
   const device = needGPU ? await getDevice() : null;
 
   // 1. Resize (if requested).
-  let base = source;
+  let base = src;
   if (wantResize && device) {
-    const dstW = options.width ?? source.width;
-    const dstH = options.height ?? source.height;
-    base = await resizeImage(device, source, dstW, dstH, srgbFilter);
+    const dstW = options.width ?? src.width;
+    const dstH = options.height ?? src.height;
+    base = await resizeImage(device, src, dstW, dstH, srgbFilter);
   }
 
   // 2. Mip chain.
@@ -108,6 +126,9 @@ async function convertLevel(
 /** Route a compressed-target conversion to the appropriate GPU encoder. */
 async function compressGPU(device: GPUDevice, level: Image, options: ConvertOptions): Promise<Image> {
   switch (options.format) {
+    case DXGI_FORMAT.BC6H_UF16:
+    case DXGI_FORMAT.BC6H_SF16:
+      return compressBC6H(device, level, { format: options.format });
     case DXGI_FORMAT.BC7_UNORM:
     case DXGI_FORMAT.BC7_UNORM_SRGB:
       return compressBC7(device, level, {
@@ -127,7 +148,7 @@ async function compressGPU(device: GPUDevice, level: Image, options: ConvertOpti
       return compressBCn(device, level, options.format);
     default:
       throw new Error(
-        `convert: GPU compression to ${DXGI_FORMAT[options.format]} not yet implemented (BC6H deferred)`,
+        `convert: GPU compression to ${DXGI_FORMAT[options.format]} not yet implemented`,
       );
   }
 }
