@@ -11,6 +11,8 @@ import {
   type Image,
 } from "../src/index.js";
 import { decodeBC7 } from "../src/bc7_decode.js";
+import { decodeBCn } from "../src/bcn_decode.js";
+import { isCompressed } from "../src/dxgi.js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const drop = $("drop");
@@ -64,9 +66,11 @@ convertBtn.addEventListener("click", async () => {
     const ms = (performance.now() - t0).toFixed(1);
     log(`Done in ${ms} ms → ${dds.byteLength} byte .dds`);
 
-    // Round-trip preview for BC7 so the user can eyeball quality.
+    // Round-trip preview so the user can eyeball compression quality.
     if (format === DXGI_FORMAT.BC7_UNORM || format === DXGI_FORMAT.BC7_UNORM_SRGB) {
       drawTo(outPreview, decodeBC7(scratch.baseImage));
+    } else if (isCompressed(format)) {
+      drawTo(outPreview, decodeBCn(scratch.baseImage));
     } else {
       drawTo(outPreview, scratch.baseImage);
     }

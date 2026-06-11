@@ -12,6 +12,7 @@ import { DXGI_FORMAT, isCompressed } from "./dxgi.js";
 import { ScratchImage, type Image } from "./image.js";
 import { getDevice } from "./gpu/device.js";
 import { compressBC7 } from "./gpu/compressBC.js";
+import { compressBCn } from "./gpu/compressBCn.js";
 
 export interface ConvertOptions {
   /** Target DXGI format (texconv -f). */
@@ -76,9 +77,20 @@ async function compressGPU(source: Image, options: ConvertOptions): Promise<Scra
       });
       return ScratchImage.from2D(bc7);
     }
+    case DXGI_FORMAT.BC1_UNORM:
+    case DXGI_FORMAT.BC1_UNORM_SRGB:
+    case DXGI_FORMAT.BC2_UNORM:
+    case DXGI_FORMAT.BC2_UNORM_SRGB:
+    case DXGI_FORMAT.BC3_UNORM:
+    case DXGI_FORMAT.BC3_UNORM_SRGB:
+    case DXGI_FORMAT.BC4_UNORM:
+    case DXGI_FORMAT.BC5_UNORM: {
+      const out = await compressBCn(device, source, options.format);
+      return ScratchImage.from2D(out);
+    }
     default:
       throw new Error(
-        `convert: GPU compression to ${DXGI_FORMAT[options.format]} not yet implemented (BC6H=M3, BC1-5=M4)`,
+        `convert: GPU compression to ${DXGI_FORMAT[options.format]} not yet implemented (BC6H=M3)`,
       );
   }
 }

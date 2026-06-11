@@ -14,8 +14,8 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 |-----------|-------|-------|
 | **M1** | Scaffold, DXGI format tables, pitch, DDS read/write, PNG→DDS demo | ✅ done |
 | **M2** | BC7 GPU encoder (WGSL + orchestrator port of `BCDirectCompute.cpp`) | ✅ done |
-| M3 | BC6H GPU encoder + HDR (.hdr) input | ⏳ |
-| M4 | New WGSL BC1/2/3/4/5 GPU encoders | ⏳ |
+| **M4** | New WGSL BC1/2/3/4/5 GPU encoders | ✅ done |
+| M3 | BC6H GPU encoder + HDR (.hdr) input | ⏸ deferred (HDR) |
 | M5 | Mipmaps, resize, sRGB, DDS reader/preview | ⏳ |
 | M6 | texconv CLI option surface + demo polish | ⏳ |
 
