@@ -69,6 +69,8 @@ export async function compressBCn(device: GPUDevice, src: Image, format: DXGI_FO
     pipelines.set(entryPoint, pipeline);
   }
 
+  device.pushErrorScope("validation");
+
   const tex = device.createTexture({
     size: { width, height },
     format: "rgba8unorm",
@@ -83,13 +85,20 @@ export async function compressBCn(device: GPUDevice, src: Image, format: DXGI_FO
 
   const outBuf = device.createBuffer({ size: outBytes, usage: BufferUsage.STORAGE | BufferUsage.COPY_SRC });
 
-  const uniform = device.createBuffer({ size: 16, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST });
-  const ud = new ArrayBuffer(16);
+  // 2D dispatch so the workgroup count per dimension stays under WebGPU's 65535
+  // cap (a 1D grid overflows for images larger than ~8K).
+  const totalWg = Math.ceil(numBlocks / 64);
+  const wgX = Math.min(totalWg, 65535);
+  const wgY = Math.ceil(totalWg / wgX);
+
+  const uniform = device.createBuffer({ size: 32, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST });
+  const ud = new ArrayBuffer(32);
   const uv = new DataView(ud);
   uv.setUint32(0, width, true);
   uv.setUint32(4, height, true);
   uv.setUint32(8, xblocks, true);
   uv.setUint32(12, numBlocks, true);
+  uv.setUint32(16, wgX, true); // num_wg_x
   device.queue.writeBuffer(uniform, 0, ud);
 
   const bindGroup = device.createBindGroup({
@@ -105,7 +114,7 @@ export async function compressBCn(device: GPUDevice, src: Image, format: DXGI_FO
   const pass = enc.beginComputePass();
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bindGroup);
-  pass.dispatchWorkgroups(Math.ceil(numBlocks / 64));
+  pass.dispatchWorkgroups(wgX, wgY);
   pass.end();
   device.queue.submit([enc.finish()]);
 
@@ -113,6 +122,9 @@ export async function compressBCn(device: GPUDevice, src: Image, format: DXGI_FO
   const enc2 = device.createCommandEncoder();
   enc2.copyBufferToBuffer(outBuf, 0, staging, 0, outBytes);
   device.queue.submit([enc2.finish()]);
+
+  const scopeError = await device.popErrorScope();
+  if (scopeError) throw new Error(`compressBCn: GPU validation error — ${scopeError.message}`);
 
   await staging.mapAsync(MapMode.READ);
   const mapped = new Uint8Array(staging.getMappedRange()).slice();

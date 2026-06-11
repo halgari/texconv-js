@@ -13,7 +13,16 @@ struct Constants {
   height: u32,
   num_block_x: u32,
   num_total_blocks: u32,
+  num_wg_x: u32, // workgroup grid width, for 2D dispatch (large images)
+  pad0: u32,
+  pad1: u32,
+  pad2: u32,
 };
+
+// Flatten a 2D dispatch (workgroup_size 64 in x) to a linear block id.
+fn blockIndex(gid: vec3<u32>) -> u32 {
+  return gid.y * (params.num_wg_x * 64u) + gid.x;
+}
 
 @group(0) @binding(0) var<uniform> params: Constants;
 @group(0) @binding(1) var g_Input: texture_2d<f32>;
@@ -145,7 +154,7 @@ fn loadColorBlock(bx: u32, by: u32) -> array<vec3<f32>, 16> {
 
 @compute @workgroup_size(64)
 fn encodeBC1(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let blockID = gid.x;
+  let blockID = blockIndex(gid);
   if (blockID >= params.num_total_blocks) { return; }
   let bx = blockID % params.num_block_x;
   let by = blockID / params.num_block_x;
@@ -156,7 +165,7 @@ fn encodeBC1(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 @compute @workgroup_size(64)
 fn encodeBC2(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let blockID = gid.x;
+  let blockID = blockIndex(gid);
   if (blockID >= params.num_total_blocks) { return; }
   let bx = blockID % params.num_block_x;
   let by = blockID / params.num_block_x;
@@ -173,7 +182,7 @@ fn encodeBC2(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 @compute @workgroup_size(64)
 fn encodeBC3(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let blockID = gid.x;
+  let blockID = blockIndex(gid);
   if (blockID >= params.num_total_blocks) { return; }
   let bx = blockID % params.num_block_x;
   let by = blockID / params.num_block_x;
@@ -190,7 +199,7 @@ fn encodeBC3(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 @compute @workgroup_size(64)
 fn encodeBC4Red(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let blockID = gid.x;
+  let blockID = blockIndex(gid);
   if (blockID >= params.num_total_blocks) { return; }
   let bx = blockID % params.num_block_x;
   let by = blockID / params.num_block_x;
@@ -203,7 +212,7 @@ fn encodeBC4Red(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 @compute @workgroup_size(64)
 fn encodeBC5(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let blockID = gid.x;
+  let blockID = blockIndex(gid);
   if (blockID >= params.num_total_blocks) { return; }
   let bx = blockID % params.num_block_x;
   let by = blockID / params.num_block_x;

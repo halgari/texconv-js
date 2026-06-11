@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+  webgpu: true
+minimumReleaseAgeExclude:
+  - '@types/node@25.9.3'

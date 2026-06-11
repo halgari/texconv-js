@@ -98,6 +98,10 @@ export async function compressBC7(
 
   const { layout, pipelines } = getPipelines(device);
 
+  // Capture validation errors as a thrown exception rather than a silent async
+  // failure (e.g. an over-cap dispatch would otherwise produce garbage quietly).
+  device.pushErrorScope("validation");
+
   // --- Input texture (rgba8unorm; no implicit sRGB conversion) ---
   const tex = device.createTexture({
     size: { width, height },
@@ -133,12 +137,12 @@ export async function compressBC7(
 
   const formatCode = opts.format; // g_format (unused by the BC7 shader math, kept for parity)
 
-  const setUniform = (modeId: number) => {
+  const setUniform = (modeId: number, startBlock: number) => {
     uniformView.setUint32(0, width, true); // g_tex_width
     uniformView.setUint32(4, xblocks, true); // g_num_block_x
     uniformView.setUint32(8, formatCode, true); // g_format
     uniformView.setUint32(12, modeId, true); // g_mode_id
-    uniformView.setUint32(16, 0, true); // g_start_block_id
+    uniformView.setUint32(16, startBlock, true); // g_start_block_id
     uniformView.setUint32(20, numBlocks, true); // g_num_total_blocks
     uniformView.setFloat32(24, alphaWeight, true); // g_alpha_weight
     uniformView.setUint32(28, 0, true); // reserved
@@ -164,8 +168,9 @@ export async function compressBC7(
     inBuf: GPUBuffer,
     outBuf: GPUBuffer,
     groups: number,
+    startBlock: number,
   ) => {
-    setUniform(modeId);
+    setUniform(modeId, startBlock);
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();
     pass.setPipeline(pipeline);
@@ -175,29 +180,37 @@ export async function compressBC7(
     device.queue.submit([enc.finish()]);
   };
 
-  const groups4 = paddedBlocks / 4; // 456 / encode: 4 blocks per workgroup
-  const groups1 = paddedBlocks; // 137 / 02: 1 block per workgroup
-
-  // Pass 1: modes 4/5/6 -> err1
-  dispatch(pipelines.tryMode456, 0, err2, err1, groups4);
-
-  // Pass 2: modes 1, 3, 7 (ping-pong err1<->err2)
-  if (mode137) {
-    dispatch(pipelines.tryMode137, 1, err1, err2, groups1);
-    dispatch(pipelines.tryMode137, 3, err2, err1, groups1);
-    dispatch(pipelines.tryMode137, 7, err1, err2, groups1);
-  }
-
-  // Pass 3: modes 0, 2 (3-subset)
-  if (mode02) {
-    dispatch(pipelines.tryMode02, 0, err2, err1, groups1);
-    dispatch(pipelines.tryMode02, 2, err1, err2, groups1);
-  }
-
-  // Pass 4: emit final blocks. Latest error buffer is err2 if any multi-subset
-  // pass ran, else err1 (only TryMode456).
+  // WebGPU caps workgroups at 65535 per dimension, so process blocks in batches
+  // (using g_start_block_id, exactly as BCDirectCompute.cpp did). The binding
+  // constraint is the 1-block-per-group passes (137/02): batch must be <= 65535
+  // blocks. Use a multiple of 4 so the 4-block-per-group passes tile evenly.
+  const BATCH = 65532;
   const finalErr = mode137 || mode02 ? err2 : err1;
-  dispatch(pipelines.encode, 0, finalErr, output, groups4);
+
+  for (let start = 0; start < paddedBlocks; start += BATCH) {
+    const nb = Math.min(BATCH, paddedBlocks - start); // multiple of 4
+    const groups4 = nb / 4; // 456 / encode: 4 blocks per workgroup
+    const groups1 = nb; // 137 / 02: 1 block per workgroup
+
+    // Pass 1: modes 4/5/6 -> err1
+    dispatch(pipelines.tryMode456, 0, err2, err1, groups4, start);
+
+    // Pass 2: modes 1, 3, 7 (ping-pong err1<->err2)
+    if (mode137) {
+      dispatch(pipelines.tryMode137, 1, err1, err2, groups1, start);
+      dispatch(pipelines.tryMode137, 3, err2, err1, groups1, start);
+      dispatch(pipelines.tryMode137, 7, err1, err2, groups1, start);
+    }
+
+    // Pass 3: modes 0, 2 (3-subset)
+    if (mode02) {
+      dispatch(pipelines.tryMode02, 0, err2, err1, groups1, start);
+      dispatch(pipelines.tryMode02, 2, err1, err2, groups1, start);
+    }
+
+    // Pass 4: emit final blocks for this batch.
+    dispatch(pipelines.encode, 0, finalErr, output, groups4, start);
+  }
 
   // --- Read back ---
   const readBytes = numBlocks * 16;
@@ -208,6 +221,9 @@ export async function compressBC7(
   const enc = device.createCommandEncoder();
   enc.copyBufferToBuffer(output, 0, staging, 0, readBytes);
   device.queue.submit([enc.finish()]);
+
+  const scopeError = await device.popErrorScope();
+  if (scopeError) throw new Error(`compressBC7: GPU validation error — ${scopeError.message}`);
 
   await staging.mapAsync(MapMode.READ);
   const mapped = new Uint8Array(staging.getMappedRange()).slice();
