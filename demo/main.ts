@@ -8,6 +8,9 @@ import {
   loadImageRGBA8,
   writeDDS,
   downloadBytes,
+  parseTexconvArgs,
+  outputFilename,
+  type ConvertOptions,
   type Image,
 } from "../src/index.js";
 import { decodeBC7 } from "../src/bc7_decode.js";
@@ -55,16 +58,40 @@ function drawTo(canvas: HTMLCanvasElement, img: Image) {
   ctx.putImageData(new ImageData(tight, img.width, img.height), 0, 0);
 }
 
+const mipsCb = $<HTMLInputElement>("mips");
+const rwInput = $<HTMLInputElement>("rw");
+const rhInput = $<HTMLInputElement>("rh");
+const argsInput = $<HTMLInputElement>("args");
+
+// Build ConvertOptions from either the texconv-args box (if non-empty) or the
+// individual UI controls.
+function buildOptions(): { options: ConvertOptions; filename: string } {
+  const args = argsInput.value.trim();
+  if (args) {
+    const parsed = parseTexconvArgs(args.split(/\s+/));
+    for (const w of parsed.warnings) log(`warning: ${w}`);
+    return { options: parsed.options, filename: outputFilename(currentName, parsed.output) };
+  }
+  const options: ConvertOptions = {
+    format: DXGI_FORMAT[formatSel.value as keyof typeof DXGI_FORMAT],
+  };
+  if (mipsCb.checked) options.mipLevels = 0;
+  if (rwInput.value) options.width = Number(rwInput.value);
+  if (rhInput.value) options.height = Number(rhInput.value);
+  return { options, filename: `${currentName}.dds` };
+}
+
 convertBtn.addEventListener("click", async () => {
   if (!current) return;
   try {
-    const format = DXGI_FORMAT[formatSel.value as keyof typeof DXGI_FORMAT];
-    log(`Converting to ${formatSel.value} …`);
+    const { options, filename } = buildOptions();
+    const format = options.format;
+    log(`Converting to ${DXGI_FORMAT[format]}${options.mipLevels === 0 ? " +mips" : ""} …`);
     const t0 = performance.now();
-    const scratch = await convert(current, { format });
+    const scratch = await convert(current, options);
     const dds = writeDDS(scratch);
     const ms = (performance.now() - t0).toFixed(1);
-    log(`Done in ${ms} ms → ${dds.byteLength} byte .dds`);
+    log(`Done in ${ms} ms → ${scratch.metadata.mipLevels} mip(s), ${dds.byteLength} byte .dds`);
 
     // Round-trip preview so the user can eyeball compression quality.
     if (format === DXGI_FORMAT.BC7_UNORM || format === DXGI_FORMAT.BC7_UNORM_SRGB) {
@@ -74,7 +101,7 @@ convertBtn.addEventListener("click", async () => {
     } else {
       drawTo(outPreview, scratch.baseImage);
     }
-    downloadBytes(dds, `${currentName}.dds`, "image/vnd-ms.dds");
+    downloadBytes(dds, filename, "image/vnd-ms.dds");
   } catch (err) {
     log(`Error: ${(err as Error).message}`);
   }

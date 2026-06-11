@@ -16,8 +16,8 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 | **M2** | BC7 GPU encoder (WGSL + orchestrator port of `BCDirectCompute.cpp`) | ✅ done |
 | **M4** | New WGSL BC1/2/3/4/5 GPU encoders | ✅ done |
 | **M5** | GPU mipmaps, resize, sRGB-correct filtering, DDS reader/preview | ✅ done |
+| **M6** | texconv CLI option surface + demo polish | ✅ done |
 | M3 | BC6H GPU encoder + HDR (.hdr) input | ⏸ deferred (HDR) |
-| M6 | texconv CLI option surface + demo polish | ⏳ |
 
 ## Develop
 
@@ -53,6 +53,23 @@ src/
 demo/          drag-drop browser UI driving the pipeline
 test/          vitest unit tests
 ```
+
+### Supported texconv options
+
+`parseTexconvArgs` maps the familiar flags onto `convert()`:
+
+| Flag | Meaning |
+|------|---------|
+| `-f <fmt>` | output format (DXGI names + `DXT1/3/5`, `RGBA`, `BGRA` aliases) |
+| `-w` / `-h` | resize width / height (GPU box filter) |
+| `-m <n>` | mip levels (`0` = full chain) |
+| `-srgb` / `-srgbi` / `-srgbo` | sRGB-correct filtering |
+| `-aw <n>` | BC7 alpha weight |
+| `-bc q` / `-bc x` | BC7 quick / 3-subset modes |
+| `-px` / `-sx` / `-l` / `-ft` | output name prefix / suffix / lowercase / extension |
+
+File-system flags (`-r`, `-flist`, `-o`, …) are parsed and reported as warnings
+in the browser build. The demo accepts these flags directly in a text box.
 
 The upstream C++ source of truth lives at `../DirectXTex`. Mapping of the GPU
 path (D3D11 → WebGPU): structured buffers → storage buffers, `cbuffer` → uniform

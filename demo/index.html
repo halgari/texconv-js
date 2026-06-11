@@ -52,7 +52,15 @@
         <option value="BC5_UNORM">BC5_UNORM — RG (GPU)</option>
         <option value="BC6H_UF16" disabled>BC6H_UF16 (HDR, later)</option>
       </select>
+      <label><input type="checkbox" id="mips" /> Generate mipmaps</label>
+      <label>Resize <input id="rw" type="number" min="1" placeholder="w" style="width:5rem" /> ×
+        <input id="rh" type="number" min="1" placeholder="h" style="width:5rem" /></label>
       <button id="convert" class="primary" disabled>Convert &amp; download .dds</button>
+    </div>
+
+    <div class="row">
+      <label for="args" title="Overrides the controls above when non-empty">texconv args</label>
+      <input id="args" type="text" placeholder="-f BC7_UNORM -m 0 -w 256" style="flex:1;min-width:18rem" />
     </div>
 
     <div class="panel">

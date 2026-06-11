@@ -30,6 +30,10 @@ export interface ConvertOptions {
   srgbFilter?: boolean;
   /** BC7 alpha weighting (texconv -aw). */
   alphaWeight?: number;
+  /** BC7 quick mode — modes 4/5/6 only (texconv -bc q). */
+  bc7Quick?: boolean;
+  /** BC7 also try 3-subset modes 0/2 (texconv -bc x). */
+  bc7Use3Subsets?: boolean;
 }
 
 const R8_FAMILY = new Set([DXGI_FORMAT.R8G8B8A8_UNORM, DXGI_FORMAT.R8G8B8A8_UNORM_SRGB]);
@@ -109,6 +113,8 @@ async function compressGPU(device: GPUDevice, level: Image, options: ConvertOpti
       return compressBC7(device, level, {
         format: options.format,
         alphaWeight: options.alphaWeight ?? 1,
+        quick: options.bc7Quick ?? false,
+        use3Subsets: options.bc7Use3Subsets ?? false,
       });
     case DXGI_FORMAT.BC1_UNORM:
     case DXGI_FORMAT.BC1_UNORM_SRGB:
