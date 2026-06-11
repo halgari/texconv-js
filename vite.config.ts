@@ -4,7 +4,6 @@ import { defineConfig } from "vite";
 // so no custom plugin is needed. `npm run dev` serves the demo at /demo.
 export default defineConfig({
   root: "demo",
-  publicDir: "../public",
   build: {
     outDir: "../dist-demo",
     emptyOutDir: true,

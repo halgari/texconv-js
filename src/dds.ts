@@ -187,6 +187,16 @@ export function readDDS(data: Uint8Array): ScratchImage {
   if (format === DXGI_FORMAT.UNKNOWN) throw new Error("DDS: unknown format");
   if (mipLevels < 1) mipLevels = 1;
 
+  // The reader only materializes the slice-0 2D mip chain. Reject array,
+  // cubemap, and volume textures rather than returning metadata (arraySize /
+  // dimension) that disagrees with the images actually read.
+  if (arraySize > 1) {
+    throw new Error(`DDS: array textures not yet supported (arraySize=${arraySize})`);
+  }
+  if (dimension === TEX_DIMENSION.TEXTURE3D) {
+    throw new Error("DDS: 3D/volume textures not yet supported");
+  }
+
   const metadata: TexMetadata = {
     width,
     height,

@@ -52,6 +52,44 @@ test("new-style RLE scanlines decode (run + literal)", () => {
   }
 });
 
+test("new-style RLE literal spans decode (count <= 128)", () => {
+  const width = 8;
+  const header = `#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X ${width}\n`;
+  const head = new TextEncoder().encode(header);
+  const planes: number[] = [2, 2, (width >> 8) & 0xff, width & 0xff];
+  // Per channel: a literal span of `width` distinct bytes (count <= 128).
+  const rVals = [10, 20, 30, 40, 50, 60, 70, 80];
+  const eVals = 136; // exponent so scale = 2^(136-136) = 1
+  for (const ch of [rVals, rVals.map((v) => v + 1), rVals.map((v) => v + 2)]) {
+    planes.push(width, ...ch);
+  }
+  planes.push(128 + width, eVals); // exponent: run of constant 136
+  const img = loadHDR(new Uint8Array([...head, ...planes]));
+  const f = new Float32Array(img.pixels.buffer);
+  expect(f[0]).toBeCloseTo(10, 5); // r at x=0
+  expect(f[4 * 7]).toBeCloseTo(80, 5); // r at x=7
+});
+
+test("old-style RLE runs repeat the previous pixel", () => {
+  // width 4: pixel0 normal, (1,1,1,2) repeats it twice, then pixel3 normal.
+  const header = `#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 4\n`;
+  const head = new TextEncoder().encode(header);
+  const body = [128, 64, 32, 136, /*run*/ 1, 1, 1, 2, /*px3*/ 200, 100, 50, 136];
+  const img = loadHDR(new Uint8Array([...head, ...body]));
+  const f = new Float32Array(img.pixels.buffer);
+  // x0, x1, x2 share the first pixel's value; x3 differs.
+  expect(f[0]).toBeCloseTo(128, 5);
+  expect(f[4]).toBeCloseTo(128, 5);
+  expect(f[8]).toBeCloseTo(128, 5);
+  expect(f[12]).toBeCloseTo(200, 5);
+});
+
+test("truncated scanline data throws", () => {
+  const header = `#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 4\n`;
+  const head = new TextEncoder().encode(header);
+  expect(() => loadHDR(new Uint8Array([...head, 10, 20]))).toThrow(/truncated/);
+});
+
 test("rgba8ToLinearFloat applies the sRGB curve and tonemapToRGBA8 round-trips LDR", () => {
   const src = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, 2, 1);
   src.pixels.set([255, 188, 0, 255, 0, 0, 0, 128]);

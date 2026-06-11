@@ -70,6 +70,27 @@ export async function convert(source: Image, options: ConvertOptions): Promise<S
       `convert: HDR float source currently supports only BC6H targets; got ${DXGI_FORMAT[options.format]}`,
     );
   }
+
+  // The swizzle/colorkey/premultiply transforms are RGBA8-only. Reject the
+  // combinations that would otherwise fail deep inside a transform with an
+  // opaque assertion: any of them on a float source, and premultiply on a BC6H
+  // target (where it runs after the linear-float expansion below). flip is
+  // format-generic and always allowed.
+  const rgba8OnlyTransform =
+    !!options.swizzle ||
+    options.colorKey !== undefined ||
+    !!options.premultiplyAlpha ||
+    !!options.straightAlpha;
+  if (floatSource && rgba8OnlyTransform) {
+    throw new Error(
+      "convert: -swizzle/-c/-pmalpha/-alpha are not supported for HDR float sources (RGBA8-only transforms)",
+    );
+  }
+  if (BC6H.has(options.format) && options.premultiplyAlpha) {
+    throw new Error(
+      "convert: -pmalpha is not supported for BC6H targets (premultiply runs in linear float after expansion)",
+    );
+  }
   // CPU transforms, in upstream texconv's relative order (undo-pmalpha, flip,
   // swizzle, colorkey). Deviation: upstream resizes before swizzle/colorkey; we
   // apply them pre-resize so the RGBA8 and HDR-float paths share one code path —

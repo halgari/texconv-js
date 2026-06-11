@@ -44,4 +44,27 @@ describe("parseTexconvArgs", () => {
     const { output } = parseTexconvArgs("-px pre_ -sx _suf -l".split(" "));
     expect(outputFilename("MyTex.PNG", output)).toBe("pre_mytex_suf.dds");
   });
+
+  it("honors -ft for the output extension", () => {
+    const { output } = parseTexconvArgs("-ft tga".split(" "));
+    expect(outputFilename("tex.png", output)).toBe("tex.tga");
+    const dotted = parseTexconvArgs("-ft .png".split(" ")).output;
+    expect(outputFilename("tex.dds", dotted)).toBe("tex.png");
+  });
+
+  it("warns on missing/non-numeric -w/-m values instead of producing NaN", () => {
+    const { options, warnings } = parseTexconvArgs("-w abc -h 64 -m".split(" "));
+    expect(options.width).toBeUndefined();
+    expect(options.height).toBe(64);
+    expect(options.mipLevels).toBeUndefined();
+    expect(warnings.some((w) => w.includes("-w width"))).toBe(true);
+    expect(warnings.some((w) => w.includes("-m mip levels"))).toBe(true);
+  });
+
+  it("reports value-consuming passthrough flags as ignored, not unrecognized", () => {
+    const { warnings, files } = parseTexconvArgs("-nits 100 -fl 12.1 in.png".split(" "));
+    expect(files).toEqual(["in.png"]); // values consumed, not treated as inputs
+    expect(warnings.every((w) => !w.toLowerCase().includes("unrecognized"))).toBe(true);
+    expect(warnings.some((w) => w.includes("no effect"))).toBe(true);
+  });
 });

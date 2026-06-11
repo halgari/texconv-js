@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # packageManager in package.json pins the pnpm version.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (CPU)
+        run: pnpm test
+
+      - name: Library build
+        run: pnpm build:lib && pnpm build:types
+
+  # NOTE: the GPU integration tests (pnpm test:gpu) need a real WebGPU/Vulkan
+  # device and are not run here. Run them locally per the README, or wire up a
+  # software Vulkan (lavapipe) runner if GPU coverage in CI becomes necessary.

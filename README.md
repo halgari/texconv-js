@@ -14,10 +14,10 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 |-----------|-------|-------|
 | **M1** | Scaffold, DXGI format tables, pitch, DDS read/write, PNG→DDS demo | ✅ done |
 | **M2** | BC7 GPU encoder (WGSL + orchestrator port of `BCDirectCompute.cpp`) | ✅ done |
+| **M3** | BC6H GPU encoder (UF16/SF16) + HDR (.hdr) input | ✅ done |
 | **M4** | New WGSL BC1/2/3/4/5 GPU encoders | ✅ done |
 | **M5** | GPU mipmaps, resize, sRGB-correct filtering, DDS reader/preview | ✅ done |
 | **M6** | texconv CLI option surface + demo polish | ✅ done |
-| **M3** | BC6H GPU encoder (UF16/SF16) + HDR (.hdr) input | ✅ done |
 
 > BC6H matches upstream texconv's GPU encoder (`BC6HEncode.hlsl`), including its
 > `max(pixel, 0)` input clamp — negative values encode as zero even for SF16.
@@ -26,20 +26,23 @@ runs on the GPU via compute shaders (the same approach as DirectXTex's
 
 ## Develop
 
+This project uses **pnpm** (see `pnpm-lock.yaml`).
+
 ```bash
-npm install
-npm run dev        # serve the demo at http://localhost:5173 (needs a WebGPU browser)
-npm test           # CPU unit tests (vitest, Node)
-npm run test:gpu   # GPU integration tests in headless Chromium (vitest browser mode)
-npm run test:all   # both
-npm run typecheck  # tsc --noEmit
-npm run build      # build the browser demo artifact into dist-demo/
+pnpm install
+pnpm dev          # serve the demo at http://localhost:5173 (needs a WebGPU browser)
+pnpm test         # CPU unit tests (vitest, Node)
+pnpm test:gpu     # GPU integration tests in headless Chromium (vitest browser mode)
+pnpm test:all     # both
+pnpm typecheck    # tsc --noEmit
+pnpm build        # build the browser demo artifact into dist-demo/
+pnpm build:lib    # bundle the library into dist/ (with pnpm build:types for .d.ts)
 ```
 
 GPU tests need a one-time Playwright Chromium download:
 
 ```bash
-npx playwright install chromium
+pnpm exec playwright install chromium
 ```
 
 ### Testing the GPU path
@@ -88,7 +91,10 @@ test/          vitest unit tests
 
 ### Supported texconv options
 
-`parseTexconvArgs` maps the familiar flags onto `convert()`:
+texconv-js ships no standalone command-line binary — `parseTexconvArgs`
+(`src/cli.ts`) parses a texconv-style argument string into `ConvertOptions` so
+the same flags drive `convert()` from the browser (the demo exposes them in a
+text box). It maps:
 
 | Flag | Meaning |
 |------|---------|

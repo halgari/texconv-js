@@ -8,13 +8,17 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "src"
+    "src",
+    "LICENSE"
   ],
+  "packageManager": "pnpm@11.0.9",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "deploy": "npm run build && wrangler deploy",
     "build:lib": "vite build --config vite.lib.config.ts",
+    "build:types": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build:lib && npm run build:types",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --project unit",

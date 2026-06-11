@@ -1,0 +1,14 @@
+{
+  // Declaration-only build for the published library. Scoped to src/ with
+  // rootDir src so emitted .d.ts land flat in dist/ (dist/index.d.ts, …),
+  // matching package.json "types". Used by `npm run build:types`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declarationDir": "dist",
+    "emitDeclarationOnly": true
+  },
+  "include": ["src"]
+}

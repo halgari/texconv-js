@@ -98,6 +98,20 @@ describe("convert integration (CPU-only paths)", () => {
     // hflip puts 20 at x=0; swizzle "gr" -> [g, r, r, r] => pixel (20,0,..) -> (0,20,20,20)
     expect([...scratch.baseImage.pixels.subarray(0, 4)]).toEqual([0, 20, 20, 20]);
   });
+
+  it("rejects RGBA8-only transforms on HDR float sources with a clear error", async () => {
+    const hdr = makeImage(DXGI_FORMAT.R32G32B32A32_FLOAT, 4, 4);
+    await expect(
+      convert(hdr, { format: DXGI_FORMAT.BC6H_UF16, swizzle: "abgr" }),
+    ).rejects.toThrow(/not supported for HDR float sources/);
+  });
+
+  it("rejects -pmalpha on BC6H targets with a clear error", async () => {
+    const img = makeImage(DXGI_FORMAT.R8G8B8A8_UNORM, 4, 4);
+    await expect(
+      convert(img, { format: DXGI_FORMAT.BC6H_UF16, premultiplyAlpha: true }),
+    ).rejects.toThrow(/not supported for BC6H/);
+  });
 });
 
 describe("srgb flag semantics", () => {

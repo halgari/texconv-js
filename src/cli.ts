@@ -54,8 +54,12 @@ export interface ParsedCommand {
 // Flags that consume the following token as their value.
 const VALUE_FLAGS = new Set([
   "f", "w", "h", "m", "aw", "bc", "if", "px", "sx", "o", "ft", "fl", "gpu",
-  "wicq", "at", "nmapamp", "c", "nits", "swizzle", "fl",
+  "wicq", "at", "nmapamp", "c", "nits", "swizzle",
 ]);
+
+// Value-consuming flags accepted (so their argument isn't mistaken for an input
+// file) but with no effect in the browser build.
+const IGNORED_VALUE_FLAGS = new Set(["wicq", "at", "nmapamp", "nits", "fl"]);
 
 /** Parse texconv-style argv (without the program name) into a ParsedCommand. */
 export function parseTexconvArgs(argv: string[]): ParsedCommand {
@@ -65,6 +69,17 @@ export function parseTexconvArgs(argv: string[]): ParsedCommand {
   const warnings: string[] = [];
 
   let srgbOut = false;
+
+  // Parse a numeric flag value, warning (and returning undefined) on a missing
+  // or non-numeric argument so it doesn't silently become NaN.
+  const num = (raw: string | undefined, label: string): number | undefined => {
+    const n = Number(raw);
+    if (raw === undefined || raw === "" || Number.isNaN(n)) {
+      warnings.push(`Invalid ${label} '${raw ?? ""}' (expected a number)`);
+      return undefined;
+    }
+    return n;
+  };
 
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i];
@@ -83,10 +98,10 @@ export function parseTexconvArgs(argv: string[]): ParsedCommand {
         else options.format = fmt;
         break;
       }
-      case "w": options.width = Number(value); break;
-      case "h": options.height = Number(value); break;
-      case "m": options.mipLevels = Number(value); break;
-      case "aw": options.alphaWeight = Number(value); break;
+      case "w": { const n = num(value, "-w width"); if (n !== undefined) options.width = n; break; }
+      case "h": { const n = num(value, "-h height"); if (n !== undefined) options.height = n; break; }
+      case "m": { const n = num(value, "-m mip levels"); if (n !== undefined) options.mipLevels = n; break; }
+      case "aw": { const n = num(value, "-aw alpha weight"); if (n !== undefined) options.alphaWeight = n; break; }
       // -srgbi: treat INPUT as sRGB (filtering); -srgbo: tag OUTPUT format as
       // sRGB; -srgb: both — mirroring upstream texconv.
       case "srgb": options.srgbFilter = true; srgbOut = true; break;
@@ -136,7 +151,11 @@ export function parseTexconvArgs(argv: string[]): ParsedCommand {
         warnings.push(`-${name} has no effect in the browser build`);
         break;
       default:
-        warnings.push(`Unrecognized option -${name}${takesValue ? ` ${value}` : ""}`);
+        if (IGNORED_VALUE_FLAGS.has(name)) {
+          warnings.push(`-${name} has no effect in the browser build`);
+        } else {
+          warnings.push(`Unrecognized option -${name}${takesValue ? ` ${value}` : ""}`);
+        }
     }
   }
 

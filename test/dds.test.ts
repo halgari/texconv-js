@@ -49,3 +49,40 @@ describe("DDS write/read round-trip", () => {
     expect(back.images[1].pixels[0]).toBe(0xcd);
   });
 });
+
+/** Hand-build a legacy (non-DX10) FourCC DDS for the given format + one block. */
+function legacyFourCCDDS(fourCC: string, width: number, height: number, fill: number): Uint8Array {
+  const slice = ((width + 3) >> 2) * ((height + 3) >> 2) * 16; // BC2/BC3 = 16 B/block
+  const buf = new ArrayBuffer(4 + 124 + slice);
+  const view = new DataView(buf);
+  view.setUint32(0, 0x20534444, true); // "DDS "
+  view.setUint32(4, 124, true); // header size
+  view.setUint32(8, 0x1007 | 0x80000, true); // flags (texture + linearsize)
+  view.setUint32(12, height, true);
+  view.setUint32(16, width, true);
+  // DDS_PIXELFORMAT at offset 4 + 72 = 76
+  view.setUint32(76, 32, true); // pf size
+  view.setUint32(80, 0x4, true); // DDPF_FOURCC
+  view.setUint32(84, [...fourCC].reduce((a, ch, i) => a | (ch.charCodeAt(0) << (i * 8)), 0) >>> 0, true);
+  new Uint8Array(buf).fill(fill, 4 + 124);
+  return new Uint8Array(buf);
+}
+
+describe("readDDS legacy FourCC", () => {
+  it("maps DXT5 to BC3_UNORM and reads the block", () => {
+    const back = readDDS(legacyFourCCDDS("DXT5", 4, 4, 0x5a));
+    expect(back.metadata.format).toBe(DXGI_FORMAT.BC3_UNORM);
+    expect(back.metadata.width).toBe(4);
+    expect(back.images.length).toBe(1);
+    expect(back.images[0].pixels[0]).toBe(0x5a);
+  });
+
+  it("maps DXT3 to BC2_UNORM", () => {
+    const back = readDDS(legacyFourCCDDS("DXT3", 8, 8, 0x11));
+    expect(back.metadata.format).toBe(DXGI_FORMAT.BC2_UNORM);
+  });
+
+  it("throws on an unsupported FourCC", () => {
+    expect(() => readDDS(legacyFourCCDDS("ZZZZ", 4, 4, 0))).toThrow(/unsupported FourCC/);
+  });
+});
