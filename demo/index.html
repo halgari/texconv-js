@@ -89,7 +89,15 @@
         transition: background .15s;
       }
       button.primary:hover:not(:disabled) { background: var(--accent-hover); }
-      button.primary:disabled { opacity: .45; cursor: not-allowed; }
+      button.secondary {
+        font: inherit; font-weight: 600; cursor: pointer;
+        background: var(--surface-2); color: var(--text);
+        border: 1px solid var(--border-2); border-radius: 6px; padding: .6rem .9rem;
+        transition: border-color .15s, color .15s;
+      }
+      button.secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+      button.primary:disabled, button.secondary:disabled { opacity: .45; cursor: not-allowed; }
+      #sidebar .inline button { flex: 1 1 0; }
 
       /* ---- stats ---- */
       #stats { border-top: 1px solid var(--border); padding-top: .8rem; display: none; }
@@ -202,7 +210,10 @@
           <input id="args" type="text" placeholder="-f BC7_UNORM -m 0 -w 256" />
         </div>
 
-        <button id="convert" class="primary" disabled>Convert &amp; download .dds</button>
+        <div class="inline">
+          <button id="convert" class="primary" disabled>Convert</button>
+          <button id="download" class="secondary" disabled>Download .dds</button>
+        </div>
 
         <div id="stats">
           <div class="stat-big" id="statSaved"></div>

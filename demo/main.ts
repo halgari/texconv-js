@@ -23,6 +23,7 @@ const drop = $("drop");
 const fileInput = $<HTMLInputElement>("file");
 const formatSel = $<HTMLSelectElement>("format");
 const convertBtn = $<HTMLButtonElement>("convert");
+const downloadBtn = $<HTMLButtonElement>("download");
 const logEl = $("log");
 const gpuEl = $("gpu");
 const hintEl = $("viewerHint");
@@ -33,6 +34,8 @@ const viewer = new CompareViewer();
 let current: Image | null = null;
 let currentName = "texture";
 let currentFileBytes = 0;
+let lastDds: Uint8Array | null = null;
+let lastFilename = "texture.dds";
 
 function log(msg: string) {
   logEl.textContent += msg + "\n";
@@ -79,6 +82,8 @@ async function setImage(file: File) {
   statsEl.classList.remove("show");
   hintEl.textContent = "convert to compare";
   convertBtn.disabled = false;
+  lastDds = null;
+  downloadBtn.disabled = true;
 }
 
 const mipsCb = $<HTMLInputElement>("mips");
@@ -145,10 +150,16 @@ convertBtn.addEventListener("click", async () => {
     $("statTime").textContent = `${ms.toFixed(1)} ms`;
     statsEl.classList.add("show");
 
-    downloadBytes(dds, filename, "image/vnd-ms.dds");
+    lastDds = dds;
+    lastFilename = filename;
+    downloadBtn.disabled = false;
   } catch (err) {
     log(`Error: ${(err as Error).message}`);
   }
+});
+
+downloadBtn.addEventListener("click", () => {
+  if (lastDds) downloadBytes(lastDds, lastFilename, "image/vnd-ms.dds");
 });
 
 fileInput.addEventListener("change", () => {
