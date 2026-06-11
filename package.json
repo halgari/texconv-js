@@ -1,0 +1,26 @@
+{
+  "name": "texconv-js",
+  "version": "0.0.1",
+  "description": "GPU (WebGPU) texture converter — a TypeScript port of Microsoft DirectXTex texconv",
+  "type": "module",
+  "main": "dist/texconv-js.js",
+  "module": "dist/texconv-js.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build:lib": "vite build --config vite.lib.config.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "keywords": ["texture", "dds", "bc7", "bc6h", "webgpu", "directxtex", "texconv", "block-compression"],
+  "license": "MIT",
+  "devDependencies": {
+    "@webgpu/types": "^0.1.60",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}

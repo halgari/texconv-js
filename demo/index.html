@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>texconv-js — WebGPU texture converter</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        font: 14px/1.5 system-ui, sans-serif;
+        margin: 0; padding: 2rem; background: #15171c; color: #e7e9ee;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+      .sub { color: #9aa0ab; margin: 0 0 1.5rem; }
+      #drop {
+        border: 2px dashed #3a3f4b; border-radius: 12px; padding: 2.5rem;
+        text-align: center; color: #9aa0ab; transition: border-color .15s, background .15s;
+      }
+      #drop.hover { border-color: #6ea8fe; background: #1b1e26; }
+      .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin: 1.25rem 0; }
+      label { color: #c4c9d4; }
+      select, button {
+        font: inherit; background: #232734; color: #e7e9ee; border: 1px solid #3a3f4b;
+        border-radius: 8px; padding: .45rem .7rem;
+      }
+      button { cursor: pointer; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      button.primary { background: #2b6cff; border-color: #2b6cff; }
+      canvas { max-width: 320px; border-radius: 8px; image-rendering: pixelated; background: #0c0d10; }
+      #log { white-space: pre-wrap; font-family: ui-monospace, monospace; color: #9aa0ab; margin-top: 1rem; }
+      .panel { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem; }
+      .gpu { font-size: .85rem; color: #7e8694; }
+    </style>
+  </head>
+  <body>
+    <h1>texconv-js</h1>
+    <p class="sub">A WebGPU port of Microsoft DirectXTex <code>texconv</code>. <span class="gpu" id="gpu"></span></p>
+
+    <div id="drop">Drop an image here, or <label style="text-decoration: underline; cursor: pointer">browse<input id="file" type="file" accept="image/*" hidden /></label></div>
+
+    <div class="row">
+      <label for="format">Output format</label>
+      <select id="format">
+        <option value="R8G8B8A8_UNORM">R8G8B8A8_UNORM (uncompressed)</option>
+        <option value="R8G8B8A8_UNORM_SRGB">R8G8B8A8_UNORM_SRGB (uncompressed)</option>
+        <option value="BC7_UNORM" disabled>BC7_UNORM (M2)</option>
+        <option value="BC6H_UF16" disabled>BC6H_UF16 (M3)</option>
+        <option value="BC1_UNORM" disabled>BC1_UNORM (M4)</option>
+      </select>
+      <button id="convert" class="primary" disabled>Convert &amp; download .dds</button>
+    </div>
+
+    <div class="panel">
+      <div>
+        <div class="gpu">Preview</div>
+        <canvas id="preview" width="320" height="320"></canvas>
+      </div>
+    </div>
+
+    <div id="log"></div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
