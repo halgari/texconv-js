@@ -9,13 +9,25 @@
 import { DXGI_FORMAT, computePitch } from "./dxgi.js";
 import type { Image } from "./image.js";
 
+export interface LoadOptions {
+  /**
+   * Color-manage the decode to sRGB ("default", the standard) so images carrying a
+   * Display-P3 / Adobe-RGB profile (common in phone photos, screenshots, many PNGs)
+   * decode to correct sRGB values. Set false to read the raw encoded bytes ("none")
+   * — only correct when the source is already plain sRGB and you want byte-exact
+   * texconv/WIC-style passthrough.
+   */
+  colorManage?: boolean;
+}
+
 /** Decode a PNG/JPG/etc. blob to an R8G8B8A8_UNORM Image (mip 0). */
 export async function loadImageRGBA8(
   source: Blob | ImageBitmapSource,
+  opts: LoadOptions = {},
 ): Promise<Image> {
   const bitmap = await createImageBitmap(source as ImageBitmapSource, {
     premultiplyAlpha: "none",
-    colorSpaceConversion: "none",
+    colorSpaceConversion: opts.colorManage === false ? "none" : "default",
   });
   try {
     const { width, height } = bitmap;
