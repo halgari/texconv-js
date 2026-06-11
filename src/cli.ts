@@ -9,6 +9,20 @@
 
 import { DXGI_FORMAT } from "./dxgi.js";
 import type { ConvertOptions } from "./texconv.js";
+import { parseSwizzle } from "./transform.js";
+
+/** Map a UNORM format to its _SRGB variant where one exists (texconv -srgbo). */
+function toSRGBFormat(fmt: DXGI_FORMAT): DXGI_FORMAT {
+  switch (fmt) {
+    case DXGI_FORMAT.R8G8B8A8_UNORM: return DXGI_FORMAT.R8G8B8A8_UNORM_SRGB;
+    case DXGI_FORMAT.B8G8R8A8_UNORM: return DXGI_FORMAT.B8G8R8A8_UNORM_SRGB;
+    case DXGI_FORMAT.BC1_UNORM: return DXGI_FORMAT.BC1_UNORM_SRGB;
+    case DXGI_FORMAT.BC2_UNORM: return DXGI_FORMAT.BC2_UNORM_SRGB;
+    case DXGI_FORMAT.BC3_UNORM: return DXGI_FORMAT.BC3_UNORM_SRGB;
+    case DXGI_FORMAT.BC7_UNORM: return DXGI_FORMAT.BC7_UNORM_SRGB;
+    default: return fmt;
+  }
+}
 
 /** Resolve a texconv -f format name (case-insensitive, with aliases) to a DXGI_FORMAT. */
 export function formatFromName(name: string): DXGI_FORMAT | undefined {
@@ -50,6 +64,8 @@ export function parseTexconvArgs(argv: string[]): ParsedCommand {
   const files: string[] = [];
   const warnings: string[] = [];
 
+  let srgbOut = false;
+
   for (let i = 0; i < argv.length; i++) {
     const tok = argv[i];
     if (tok[0] !== "-" && tok[0] !== "/") {
@@ -71,7 +87,33 @@ export function parseTexconvArgs(argv: string[]): ParsedCommand {
       case "h": options.height = Number(value); break;
       case "m": options.mipLevels = Number(value); break;
       case "aw": options.alphaWeight = Number(value); break;
-      case "srgb": case "srgbi": case "srgbo": options.srgbFilter = true; break;
+      // -srgbi: treat INPUT as sRGB (filtering); -srgbo: tag OUTPUT format as
+      // sRGB; -srgb: both — mirroring upstream texconv.
+      case "srgb": options.srgbFilter = true; srgbOut = true; break;
+      case "srgbi": options.srgbFilter = true; break;
+      case "srgbo": srgbOut = true; break;
+      case "hflip": options.hflip = true; break;
+      case "vflip": options.vflip = true; break;
+      case "swizzle": {
+        try {
+          if (value) parseSwizzle(value);
+          options.swizzle = value;
+        } catch (e) {
+          warnings.push((e as Error).message);
+        }
+        break;
+      }
+      case "c": {
+        const key = value ? Number.parseInt(value.replace(/^0x/i, ""), 16) : NaN;
+        if (Number.isNaN(key) || key < 0 || key > 0xffffff) {
+          warnings.push(`Invalid colorkey '${value}' (expected hex RRGGBB)`);
+        } else {
+          options.colorKey = key;
+        }
+        break;
+      }
+      case "pmalpha": options.premultiplyAlpha = true; break;
+      case "alpha": options.straightAlpha = true; break;
       case "bc": {
         for (const ch of value ?? "") {
           if (ch === "q") options.bc7Quick = true;
@@ -96,6 +138,14 @@ export function parseTexconvArgs(argv: string[]): ParsedCommand {
       default:
         warnings.push(`Unrecognized option -${name}${takesValue ? ` ${value}` : ""}`);
     }
+  }
+
+  // -srgbo promotes the output format to its sRGB variant (after the whole argv
+  // is parsed, since -f may appear in any position).
+  if (srgbOut) options.format = toSRGBFormat(options.format);
+  if (options.premultiplyAlpha && options.straightAlpha) {
+    warnings.push("-pmalpha and -alpha are mutually exclusive; ignoring -alpha");
+    delete options.straightAlpha;
   }
 
   return { options, output, files, warnings };

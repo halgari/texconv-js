@@ -95,7 +95,11 @@ test/          vitest unit tests
 | `-f <fmt>` | output format (DXGI names + `DXT1/3/5`, `RGBA`, `BGRA` aliases) |
 | `-w` / `-h` | resize width / height (GPU box filter) |
 | `-m <n>` | mip levels (`0` = full chain) |
-| `-srgb` / `-srgbi` / `-srgbo` | sRGB-correct filtering |
+| `-srgb` / `-srgbi` / `-srgbo` | input is sRGB (filtering) / output tagged `_SRGB` / both |
+| `-hflip` / `-vflip` | mirror horizontally / vertically |
+| `-swizzle <mask>` | channel swizzle (`rgba`/`xyzw`/`0`/`1`, e.g. `abgr`, `rgb1`) |
+| `-c <hex>` | colorkey: matching pixels → transparent black |
+| `-pmalpha` / `-alpha` | premultiply alpha (after mips) / undo premultiplied alpha |
 | `-aw <n>` | BC7 alpha weight |
 | `-bc q` / `-bc x` | BC7 quick / 3-subset modes |
 | `-px` / `-sx` / `-l` / `-ft` | output name prefix / suffix / lowercase / extension |

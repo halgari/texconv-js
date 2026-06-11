@@ -16,6 +16,7 @@ import { compressBCn } from "./gpu/compressBCn.js";
 import { compressBC6H } from "./gpu/compressBC6.js";
 import { resizeImage, generateMipChain } from "./gpu/resize.js";
 import { rgba8ToLinearFloat } from "./hdr.js";
+import { colorKeyImage, flipImage, premultiplyAlpha, swizzleImage } from "./transform.js";
 
 export interface ConvertOptions {
   /** Target DXGI format (texconv -f). */
@@ -36,6 +37,17 @@ export interface ConvertOptions {
   bc7Quick?: boolean;
   /** BC7 also try 3-subset modes 0/2 (texconv -bc x). */
   bc7Use3Subsets?: boolean;
+  /** Mirror horizontally / vertically (texconv -hflip / -vflip). */
+  hflip?: boolean;
+  vflip?: boolean;
+  /** Channel swizzle mask, e.g. "abgr" or "rgb1" (texconv -swizzle). */
+  swizzle?: string;
+  /** Colorkey 0xRRGGBB: matching pixels become transparent black (texconv -c). */
+  colorKey?: number;
+  /** Premultiply color by alpha after mip generation (texconv -pmalpha). */
+  premultiplyAlpha?: boolean;
+  /** Undo premultiplied alpha on the source (texconv -alpha). */
+  straightAlpha?: boolean;
 }
 
 const R8_FAMILY = new Set([DXGI_FORMAT.R8G8B8A8_UNORM, DXGI_FORMAT.R8G8B8A8_UNORM_SRGB]);
@@ -58,11 +70,20 @@ export async function convert(source: Image, options: ConvertOptions): Promise<S
       `convert: HDR float source currently supports only BC6H targets; got ${DXGI_FORMAT[options.format]}`,
     );
   }
+  // CPU transforms, in upstream texconv's relative order (undo-pmalpha, flip,
+  // swizzle, colorkey). Deviation: upstream resizes before swizzle/colorkey; we
+  // apply them pre-resize so the RGBA8 and HDR-float paths share one code path —
+  // only filtered-edge pixels can differ.
+  let src = source;
+  if (options.straightAlpha) src = premultiplyAlpha(src, true);
+  if (options.hflip || options.vflip) src = flipImage(src, !!options.hflip, !!options.vflip);
+  if (options.swizzle) src = swizzleImage(src, options.swizzle);
+  if (options.colorKey !== undefined) src = colorKeyImage(src, options.colorKey);
+
   // BC6H is a linear HDR format: expand 8-bit sources to linear float up front so
   // resize/mips/encode all run in linear light (texconv converts to float the same way).
-  let src = source;
   if (!floatSource && BC6H.has(options.format)) {
-    src = rgba8ToLinearFloat(source, options.srgbFilter ?? true);
+    src = rgba8ToLinearFloat(src, options.srgbFilter ?? true);
   }
 
   const wantResize = !!(options.width || options.height);
@@ -89,9 +110,11 @@ export async function convert(source: Image, options: ConvertOptions): Promise<S
     levels = [base];
   }
 
-  // 3. Convert/compress each level to the target format.
+  // 3. Convert/compress each level to the target format. Premultiplication runs
+  // after mip generation (matching upstream texconv's stage order).
   const out: Image[] = [];
-  for (const lvl of levels) {
+  for (let lvl of levels) {
+    if (options.premultiplyAlpha) lvl = premultiplyAlpha(lvl);
     out.push(await convertLevel(lvl, options, device));
   }
 
@@ -116,6 +139,11 @@ async function convertLevel(
   if (R8_FAMILY.has(format)) {
     // Reinterpret-only: same bytes, different color-space tag.
     return { ...level, format };
+  }
+
+  if (format === DXGI_FORMAT.B8G8R8A8_UNORM || format === DXGI_FORMAT.B8G8R8A8_UNORM_SRGB) {
+    // Same layout as RGBA8 with red/blue swapped (texconv -f BGRA).
+    return { ...swizzleImage(level, "bgra"), format };
   }
 
   throw new Error(

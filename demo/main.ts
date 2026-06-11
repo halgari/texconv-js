@@ -17,6 +17,7 @@ import { decodeBC7 } from "../src/bc7_decode.js";
 import { decodeBCn } from "../src/bcn_decode.js";
 import { decodeBC6H } from "../src/bc6h_decode.js";
 import { isHDRFile, loadHDR, rgba8ToLinearFloat, tonemapToRGBA8 } from "../src/hdr.js";
+import { swizzleImage } from "../src/transform.js";
 import { isCompressed } from "../src/dxgi.js";
 import { CompareViewer } from "./compare.js";
 
@@ -147,6 +148,9 @@ convertBtn.addEventListener("click", async () => {
       }
     } else if (isCompressed(format)) {
       decoded = decodeBCn(scratch.baseImage);
+    } else if (format === DXGI_FORMAT.B8G8R8A8_UNORM || format === DXGI_FORMAT.B8G8R8A8_UNORM_SRGB) {
+      // Canvas wants RGBA byte order; swap B/R back for display only.
+      decoded = swizzleImage({ ...scratch.baseImage, format: DXGI_FORMAT.R8G8B8A8_UNORM }, "bgra");
     } else {
       decoded = scratch.baseImage;
     }
