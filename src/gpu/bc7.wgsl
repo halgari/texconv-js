@@ -784,7 +784,15 @@ fn TryMode137CS(@builtin(local_invocation_index) GI: u32, @builtin(workgroup_id)
           else { color_index = aStep[step_selector][63]; }
         }
 
-        var pixel_r = interp(endPoint[subset_index][0], endPoint[subset_index][1], aWeight[step_selector][color_index]);
+        // Same values as `endPoint[subset_index][0]` and `[1]`. Indexing the
+        // function-local `endPoint` array with a runtime value here sends Mesa's
+        // Intel Vulkan driver (ANV, seen on Mesa 26.2.2 with an Arc Pro B60) into
+        // an unbounded NIR optimisation that never finishes compiling this entry
+        // point and grows until the OOM killer ends the process. With `select`
+        // it compiles in ~70 ms.
+        let ep_lo = select(endPoint[0][0], endPoint[1][0], subset_index == 1u);
+        let ep_hi = select(endPoint[0][1], endPoint[1][1], subset_index == 1u);
+        var pixel_r = interp(ep_lo, ep_hi, aWeight[step_selector][color_index]);
         if (params.g_mode_id != 7u) { pixel_r.w = 255u; }
 
         let pixel = shared_temp[threadBase + i].pixel;
